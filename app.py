@@ -583,25 +583,26 @@ if df_raw is not None:
             crosstab_pct_formatted = crosstab_pct.style.format("{:.2f}%")
             st.dataframe(crosstab_pct_formatted, use_container_width=True)
             
-            st.markdown("##### 3. Gráfico de Barras Empilhadas de Proporção")
-            fig, ax = plt.subplots(figsize=(10, 5))
-            crosstab_pct.plot(kind='bar', stacked=True, colormap='viridis', ax=ax)
-            ax.set_title(f"Distribuição Relativa de '{var_coluna}' por '{var_linha}'", fontweight='bold', fontsize=12)
-            ax.set_ylabel("Proporção (%)")
-            ax.set_xlabel(var_linha)
-            plt.xticks(rotation=45, ha='right')
-            plt.legend(title=var_coluna, bbox_to_anchor=(1.05, 1), loc='upper left')
-            
-            # Adiciona rótulos de porcentagem dentro das barras empilhadas
-            if ax.containers:
-                for c in ax.containers:
-                    labels = [f'{x:.1f}%' if x > 2 else '' for x in c.datavalues]
-                    ax.bar_label(c, labels=labels, label_type='center', fontsize=8)
-                    
-            plt.tight_layout()
-            st.pyplot(fig)
-        else:
-            st.warning("⚠️ O banco de dados carregado não possui colunas categóricas decodificadas suficientes para permitir cruzamento estatístico.")
+            if not crosstab_pct.empty and crosstab_pct.shape[0] > 0 and crosstab_pct.shape[1] > 0:
+                st.markdown("##### 3. Gráfico de Barras Empilhadas de Proporção")
+                fig, ax = plt.subplots(figsize=(10, 5))
+                crosstab_pct.plot(kind='bar', stacked=True, colormap='viridis', ax=ax)
+                ax.set_title(f"Distribuição Relativa de '{var_coluna}' por '{var_linha}'", fontweight='bold', fontsize=12)
+                ax.set_ylabel("Proporção (%)")
+                ax.set_xlabel(var_linha)
+                plt.xticks(rotation=45, ha='right')
+                plt.legend(title=var_coluna, bbox_to_anchor=(1.05, 1), loc='upper left')
+                
+                # Adiciona rótulos de porcentagem dentro das barras empilhadas
+                if ax.containers:
+                    for c in ax.containers:
+                        labels = [f'{x:.1f}%' if x > 2 else '' for x in c.datavalues]
+                        ax.bar_label(c, labels=labels, label_type='center', fontsize=8)
+                        
+                plt.tight_layout()
+                st.pyplot(fig)
+            else:
+                st.warning("⚠️ **Sem dados suficientes para gerar o gráfico cruzado.** Verifique se os filtros aplicados não esvaziaram a base de dados.")
 
     with tab_cid10:
         st.markdown("#### 📖 Navegador e Dicionário de CIDs (CID-10)")
