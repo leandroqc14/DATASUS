@@ -439,13 +439,13 @@ if df_raw is not None:
                 top10_morte = df_filtered[target_col].value_counts().head(10).reset_index()
                 top10_morte.columns = [target_col, 'Óbitos']
                 
-                fig, ax = plt.subplots(figsize=(8, 4.5))
-                sns.barplot(data=top10_morte, x='Óbitos', y=target_col, palette='Reds_r', hue=target_col, legend=False, ax=ax)
-                ax.set_title("Top 10 Principais Causas de Óbito", fontweight='bold')
-                ax.set_xlabel("Quantidade de Óbitos")
-                ax.set_ylabel("Causa (CID-10)")
-                adicionar_rotulos(ax)
-                st.pyplot(fig)
+                st.bar_chart(
+                    data=top10_morte,
+                    x='Óbitos',
+                    y=target_col,
+                    color=target_col,
+                    use_container_width=True
+                )
                 
             with col_g2:
                 st.markdown("##### Distribuição de Óbitos por Sexo")
@@ -465,13 +465,13 @@ if df_raw is not None:
             top_internacoes = df_filtered[target_col].value_counts().head(10).reset_index()
             top_internacoes.columns = [target_col, 'Internações']
             
-            fig, ax = plt.subplots(figsize=(10, 5))
-            sns.barplot(data=top_internacoes, x='Internações', y=target_col, palette='viridis', hue=target_col, legend=False, ax=ax)
-            ax.set_title("Top 10 Diagnósticos de Internação (CID Principal)", fontweight='bold')
-            ax.set_xlabel("Quantidade de Internações")
-            ax.set_ylabel("Diagnóstico Principal (CID)")
-            adicionar_rotulos(ax)
-            st.pyplot(fig)
+            st.bar_chart(
+                data=top_internacoes,
+                x='Internações',
+                y=target_col,
+                color=target_col,
+                use_container_width=True
+            )
             
         # 2. General graphs by Municipality and Age
         st.markdown("---")
@@ -485,14 +485,13 @@ if df_raw is not None:
                 top_muns = df_filtered['Município'].value_counts().head(10).reset_index()
                 top_muns.columns = ['Município', 'Ocorrências']
                 
-                fig_mun, ax_mun = plt.subplots(figsize=(8, 4.5))
-                sns.barplot(data=top_muns, x='Ocorrências', y='Município', palette='Blues_r', hue='Município', legend=False, ax=ax_mun)
-                ax_mun.set_title("Concentração Geográfica (Top 10 Municípios)", fontweight='bold')
-                ax_mun.set_xlabel("Quantidade de Casos")
-                ax_mun.set_ylabel("Município")
-                adicionar_rotulos(ax_mun)
-                plt.tight_layout()
-                st.pyplot(fig_mun)
+                st.bar_chart(
+                    data=top_muns,
+                    x='Ocorrências',
+                    y='Município',
+                    color='Município',
+                    use_container_width=True
+                )
             else:
                 st.info("ℹ️ Sem dados de município para plotagem geográfica.")
                 
@@ -526,14 +525,17 @@ if df_raw is not None:
                 faixas_contagem = df_filtered['Faixa Etária'].value_counts().reindex(faixa_ordem).dropna()
                 
                 if not faixas_contagem.empty and faixas_contagem.sum() > 0:
-                    fig_age, ax_age = plt.subplots(figsize=(8, 4.5))
-                    sns.barplot(x=faixas_contagem.values, y=faixas_contagem.index, palette='crest', hue=faixas_contagem.index, legend=False, ax=ax_age)
-                    ax_age.set_title(f"Distribuição por Faixas Etárias ({idade_col})", fontweight='bold')
-                    ax_age.set_xlabel("Quantidade de Casos")
-                    ax_age.set_ylabel("Faixa Etária")
-                    adicionar_rotulos(ax_age)
-                    plt.tight_layout()
-                    st.pyplot(fig_age)
+                    df_age_chart = pd.DataFrame({
+                        'Faixa Etária': faixas_contagem.index,
+                        'Casos': faixas_contagem.values
+                    })
+                    st.bar_chart(
+                        data=df_age_chart,
+                        x='Casos',
+                        y='Faixa Etária',
+                        color='Faixa Etária',
+                        use_container_width=True
+                    )
                 else:
                     st.warning("Sem dados numéricos de idade válidos para faixas etárias.")
             else:
