@@ -74,7 +74,7 @@ st.markdown("""
         margin-top: 3rem;
     }
 </style>
-""", unsafe_allowed_html=True)
+""", unsafe_allow_html=True)
 
 # Main Page Header
 st.markdown("""
@@ -82,7 +82,7 @@ st.markdown("""
     <h1>Assistente Científico DATASUS 🇧🇷🏥</h1>
     <p>Baixe, processe e analise dados públicos de saúde diretamente em formato tabular e gráfico para artigos científicos e trabalhos acadêmicos.</p>
 </div>
-""", unsafe_allowed_html=True)
+""", unsafe_allow_html=True)
 
 # Sidebar - Configurations & Filter Selection
 st.sidebar.markdown("### ⚙️ Opções de Pesquisa")
@@ -136,7 +136,7 @@ st.sidebar.markdown("""
 <div style="font-size: 0.85rem; color: #6c757d;">
     <b>Cache ativo:</b> Os dados baixados são convertidos e salvos em formato Apache Parquet localmente. Consultas repetidas serão carregadas instantaneamente!
 </div>
-""", unsafe_allowed_html=True)
+""", unsafe_allow_html=True)
 
 # Application state
 df = None
@@ -213,7 +213,7 @@ if metodo_busca == "💡 Linguagem Natural (Recomendado)":
         Ano: <b>{ano_detectado}</b> | 
         Mês: <b>{mes_detectado if mes_detectado else 'Anual'}</b>
     </div>
-    """, unsafe_allowed_html=True)
+    """, unsafe_allow_html=True)
     
     col_btn, _ = st.columns([1, 4])
     with col_btn:
@@ -264,21 +264,21 @@ if df is not None:
             <div class="metric-title">Total de Registros (Linhas)</div>
             <div class="metric-value">{len(df):,}</div>
         </div>
-        """, unsafe_allowed_html=True)
+        """, unsafe_allow_html=True)
     with col_m2:
         st.markdown(f"""
         <div class="metric-card">
             <div class="metric-title">Quantidade de Variáveis</div>
             <div class="metric-value">{df.shape[1]}</div>
         </div>
-        """, unsafe_allowed_html=True)
+        """, unsafe_allow_html=True)
     with col_m3:
         st.markdown(f"""
         <div class="metric-card">
             <div class="metric-title">Estado / Ano pesquisado</div>
             <div class="metric-value">{uf_final} / {ano_final}</div>
         </div>
-        """, unsafe_allowed_html=True)
+        """, unsafe_allow_html=True)
         
     # Tabs for navigation (Preview, Visualization, Export)
     tab_dados, tab_graficos, tab_exportar = st.tabs(["📊 Visualizar Tabela", "📈 Análise e Gráficos", "💾 Exportar Dados"])
@@ -425,4 +425,4 @@ st.markdown("""
     Desenvolvido com ❤️ para Pesquisadores Científicos no Brasil. 🇧🇷🏥<br>
     Dados obtidos diretamente do servidor FTP do DATASUS - Ministério da Saúde.
 </div>
-""", unsafe_allowed_html=True)
+""", unsafe_allow_html=True)
