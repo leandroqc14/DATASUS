@@ -1,0 +1,14 @@
+# Exclude local caches and virtual environments
+datasus_cache/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Exclude Git folders
+.git/
+.github/
+
+# Exclude IDE/Agent config folders
+.agents/
+.gemini/
