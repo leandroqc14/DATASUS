@@ -26,3 +26,7 @@ tmp/
 .vs/
 *.slnx
 *.sqlite
+
+# Environment variables
+.env
+.env.*

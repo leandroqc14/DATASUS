@@ -4,6 +4,8 @@ services:
     container_name: datasus_helper_app
     ports:
       - "8501:8501"
+    environment:
+      - GEMINI_API_KEY
     volumes:
       - ./datasus_cache:/app/datasus_cache
     restart: unless-stopped
