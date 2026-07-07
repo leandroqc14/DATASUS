@@ -21,3 +21,8 @@ datasus_cache/
 *.xlsx
 temp/
 tmp/
+
+# Visual Studio files
+.vs/
+*.slnx
+*.sqlite
