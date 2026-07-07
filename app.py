@@ -128,6 +128,7 @@ ano_fim_sel = 2022
 sistema_selecionado = 'sinasc'
 sigla_selecionada = 'DN'
 mes_selecionado = None
+cid_manual_input = ""
 
 if metodo_busca == "🎛️ Filtros Manuais (Formulário)":
     sistema_label = st.sidebar.selectbox("Sistema de Saúde:", list(sistemas_lista.keys()))
@@ -150,6 +151,14 @@ if metodo_busca == "🎛️ Filtros Manuais (Formulário)":
         }
         mes_label = st.sidebar.selectbox("Mês:", list(meses_opcoes.keys()))
         mes_selecionado = meses_opcoes[mes_label]
+        
+    # Optional CID-10 Filter in sidebar
+    if sistema_selecionado in ['sim', 'sih', 'sia']:
+        cid_manual_input = st.sidebar.text_input(
+            "Filtrar por CID-10 (Opcional):",
+            value="",
+            help="Digite o CID (Ex: M80.0 ou M80). Deixe vazio para baixar todos os diagnósticos."
+        )
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("""
@@ -366,7 +375,7 @@ if df_raw is not None:
         if cid_col:
             cid_input = st.text_input(
                 f"Filtrar por CID-10 ({cid_col}):",
-                value="",
+                value=cid_manual_input,
                 help="Digite o CID (Ex: M80.0 ou M80). O ponto será removido automaticamente para combinar com a base do DATASUS."
             )
             if cid_input:
