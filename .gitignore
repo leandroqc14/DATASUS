@@ -1,0 +1,23 @@
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# DATASUS data cache and temporary files
+datasus_cache/
+*.dbc
+*.dbf
+*.parquet
+*.csv
+*.xlsx
+temp/
+tmp/
