@@ -434,14 +434,15 @@ if df_raw is not None:
             col_g1, col_g2 = st.columns(2)
             with col_g1:
                 st.markdown("##### Top 10 Causas de Óbitos (CID-10)")
-                top10_morte = df_filtered['CAUSABAS'].value_counts().head(10).reset_index()
-                top10_morte.columns = ['CID-10', 'Óbitos']
+                target_col = 'Diagnóstico/Causa' if 'Diagnóstico/Causa' in df_filtered.columns else 'CAUSABAS'
+                top10_morte = df_filtered[target_col].value_counts().head(10).reset_index()
+                top10_morte.columns = [target_col, 'Óbitos']
                 
                 fig, ax = plt.subplots(figsize=(8, 4.5))
-                sns.barplot(data=top10_morte, x='Óbitos', y='CID-10', palette='Reds_r', hue='CID-10', legend=False, ax=ax)
-                ax.set_title("Top 10 Principais CIDs de Óbitos", fontweight='bold')
+                sns.barplot(data=top10_morte, x='Óbitos', y=target_col, palette='Reds_r', hue=target_col, legend=False, ax=ax)
+                ax.set_title("Top 10 Principais Causas de Óbito", fontweight='bold')
                 ax.set_xlabel("Quantidade de Óbitos")
-                ax.set_ylabel("Causa CID-10")
+                ax.set_ylabel("Causa (CID-10)")
                 adicionar_rotulos(ax)
                 st.pyplot(fig)
                 
@@ -459,11 +460,12 @@ if df_raw is not None:
         elif 'DIAG_PRINC' in df_filtered.columns:
             st.info("💡 Detectado conjunto de dados de INTERNAÇÕES HOSPITALARES (SIHSUS).")
             st.markdown("##### Top 10 Diagnósticos Principais de Internação (CIDs)")
-            top_internacoes = df_filtered['DIAG_PRINC'].value_counts().head(10).reset_index()
-            top_internacoes.columns = ['Diagnóstico (CID)', 'Internações']
+            target_col = 'Diagnóstico/Causa' if 'Diagnóstico/Causa' in df_filtered.columns else 'DIAG_PRINC'
+            top_internacoes = df_filtered[target_col].value_counts().head(10).reset_index()
+            top_internacoes.columns = [target_col, 'Internações']
             
             fig, ax = plt.subplots(figsize=(10, 5))
-            sns.barplot(data=top_internacoes, x='Internações', y='Diagnóstico (CID)', palette='viridis', hue='Diagnóstico (CID)', legend=False, ax=ax)
+            sns.barplot(data=top_internacoes, x='Internações', y=target_col, palette='viridis', hue=target_col, legend=False, ax=ax)
             ax.set_title("Top 10 Diagnósticos de Internação (CID Principal)", fontweight='bold')
             ax.set_xlabel("Quantidade de Internações")
             ax.set_ylabel("Diagnóstico Principal (CID)")
@@ -543,7 +545,7 @@ if df_raw is not None:
         # Categorical columns list generated in decodificar_dados
         colunas_cruzamento = [c for c in [
             'Sexo', 'Tipo de Parto', 'Raça/Cor', 'Escolaridade da Mãe', 
-            'Estado Civil da Mãe', 'Local da Ocorrência', 'ANO_DATA', 'Município'
+            'Estado Civil da Mãe', 'Local da Ocorrência', 'ANO_DATA', 'Município', 'Diagnóstico/Causa'
         ] if c in df_filtered.columns]
         
         if len(colunas_cruzamento) >= 2:
