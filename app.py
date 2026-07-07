@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import io
+import os
 import re
 from datasus_core import buscar_dados, baixar_periodo_datasus, CACHE_DIR
 
