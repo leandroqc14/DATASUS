@@ -427,6 +427,70 @@ if df_raw is not None:
             ax.set_xlabel("Quantidade de Internações")
             ax.set_ylabel("Diagnóstico Principal (CID)")
             st.pyplot(fig)
+            
+        # 2. General graphs by Municipality and Age
+        st.markdown("---")
+        st.markdown("#### 📍 Análises Adicionais por Município e Idade")
+        
+        col_ad_1, col_ad_2 = st.columns(2)
+        
+        with col_ad_1:
+            if mun_col:
+                st.markdown("##### Top 10 Municípios com Mais Casos")
+                top_muns = df_filtered[mun_col].value_counts().head(10).reset_index()
+                top_muns.columns = ['Código Município', 'Ocorrências']
+                
+                fig_mun, ax_mun = plt.subplots(figsize=(8, 4.5))
+                sns.barplot(data=top_muns, x='Ocorrências', y='Código Município', palette='Blues_r', hue='Código Município', legend=False, ax=ax_mun)
+                ax_mun.set_title("Concentração Geográfica (Top 10 Municípios)", fontweight='bold')
+                ax_mun.set_xlabel("Quantidade de Casos")
+                ax_mun.set_ylabel("Código IBGE do Município")
+                plt.tight_layout()
+                st.pyplot(fig_mun)
+            else:
+                st.info("ℹ️ Sem dados de município para plotagem geográfica.")
+                
+        with col_ad_2:
+            if idade_col:
+                st.markdown("##### Distribuição por Faixas Etárias")
+                # Group age into custom brackets
+                def agrupar_idade(idade):
+                    try:
+                        idade = float(idade)
+                        if pd.isna(idade) or idade < 0:
+                            return 'Não Informado'
+                        if idade < 1:
+                            return 'Menor de 1 ano'
+                        elif idade <= 12:
+                            return '1 a 12 anos'
+                        elif idade <= 19:
+                            return '13 a 19 anos (Adolescente)'
+                        elif idade <= 34:
+                            return '20 a 34 anos'
+                        elif idade <= 59:
+                            return '35 a 59 anos'
+                        else:
+                            return '60 anos ou mais'
+                    except:
+                        return 'Não Informado'
+                        
+                df_filtered['Faixa Etária'] = df_filtered[idade_col].apply(agrupar_idade)
+                faixa_ordem = ['Menor de 1 ano', '1 a 12 anos', '13 a 19 anos (Adolescente)', '20 a 34 anos', '35 a 59 anos', '60 anos ou mais', 'Não Informado']
+                
+                faixas_contagem = df_filtered['Faixa Etária'].value_counts().reindex(faixa_ordem).dropna()
+                
+                if not faixas_contagem.empty and faixas_contagem.sum() > 0:
+                    fig_age, ax_age = plt.subplots(figsize=(8, 4.5))
+                    sns.barplot(x=faixas_contagem.values, y=faixas_contagem.index, palette='crest', hue=faixas_contagem.index, legend=False, ax=ax_age)
+                    ax_age.set_title(f"Distribuição por Faixas Etárias ({idade_col})", fontweight='bold')
+                    ax_age.set_xlabel("Quantidade de Casos")
+                    ax_age.set_ylabel("Faixa Etária")
+                    plt.tight_layout()
+                    st.pyplot(fig_age)
+                else:
+                    st.warning("Sem dados numéricos de idade válidos para faixas etárias.")
+            else:
+                st.info("ℹ️ Sem dados de idade para plotagem por faixas etárias.")
 
     with tab_cruzamento:
         st.markdown("#### 🔗 Cruzamento de Variáveis Demográficas e Clínicas")
@@ -466,7 +530,7 @@ if df_raw is not None:
             ax.set_xlabel(var_linha)
             plt.xticks(rotation=45, ha='right')
             plt.legend(title=var_coluna, bbox_to_anchor=(1.05, 1), loc='upper left')
-            st.tight_layout()
+            plt.tight_layout()
             st.pyplot(fig)
         else:
             st.warning("⚠️ O banco de dados carregado não possui colunas categóricas decodificadas suficientes para permitir cruzamento estatístico.")
