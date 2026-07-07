@@ -286,18 +286,31 @@ if df_raw is not None:
     st.success(f"🎉 Dados originais carregados na memória! Total bruto: {len(df_raw):,} registros.")
     
     # ------------------ DYNAMIC FILTERING INTERFACE ------------------
-    st.markdown("### 🎛️ Painel de Filtros Acadêmicos (Idade e Município)")
+    st.markdown("### 🎛️ Painel de Filtros Acadêmicos (Idade, Município e CID-10)")
     
-    col_filt_1, col_filt_2 = st.columns(2)
-    df_filtered = df_raw.copy()
-    
-    # 1. Age Filtering logic based on columns present
+    # Detect relevant columns
     idade_col = None
     if 'Idade da Mãe' in df_raw.columns:
         idade_col = 'Idade da Mãe'
     elif 'Idade (Anos)' in df_raw.columns:
         idade_col = 'Idade (Anos)'
         
+    mun_col = None
+    for c in ['CODMUNRES', 'CODMUNNASC', 'CODMUNOCOR', 'MUNIC_RES', 'MUNIC_OP']:
+        if c in df_raw.columns:
+            mun_col = c
+            break
+            
+    cid_col = None
+    for c in ['CAUSABAS', 'DIAG_PRINC', 'AP_CIDPRI']:
+        if c in df_raw.columns:
+            cid_col = c
+            break
+            
+    col_filt_1, col_filt_2, col_filt_3 = st.columns(3)
+    df_filtered = df_raw.copy()
+    
+    # 1. Age Filtering logic
     with col_filt_1:
         if idade_col:
             df_filtered[idade_col] = pd.to_numeric(df_filtered[idade_col], errors='coerce')
@@ -321,12 +334,6 @@ if df_raw is not None:
             st.info("ℹ️ Nenhuma coluna de idade encontrada neste sistema para filtragem automática.")
 
     # 2. Municipality Filtering logic
-    mun_col = None
-    for c in ['CODMUNRES', 'CODMUNNASC', 'CODMUNOCOR', 'MUNIC_RES', 'MUNIC_OP']:
-        if c in df_raw.columns:
-            mun_col = c
-            break
-            
     with col_filt_2:
         if 'Município' in df_raw.columns:
             # Get unique values of decoded municipality names
@@ -341,6 +348,20 @@ if df_raw is not None:
                 df_filtered = df_filtered[df_filtered['Município'].astype(str).isin(mun_selecionados)]
         else:
             st.info("ℹ️ Nenhuma coluna de município encontrada neste sistema para filtragem.")
+            
+    # 3. CID-10 Filtering logic
+    with col_filt_3:
+        if cid_col:
+            cid_input = st.text_input(
+                f"Filtrar por CID-10 ({cid_col}):",
+                value="",
+                help="Digite o CID (Ex: M80.0 ou M80). O ponto será removido automaticamente para combinar com a base do DATASUS."
+            )
+            if cid_input:
+                cid_cleaned = cid_input.replace('.', '').strip().upper()
+                df_filtered = df_filtered[df_filtered[cid_col].astype(str).str.upper().str.startswith(cid_cleaned)]
+        else:
+            st.info("ℹ️ Nenhuma coluna de CID-10 encontrada para filtragem de diagnóstico/causa.")
             
     # ------------------ MAIN METRICS ------------------
     st.markdown("---")
