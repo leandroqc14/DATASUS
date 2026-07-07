@@ -6,6 +6,23 @@ import io
 import re
 from datasus_core import buscar_dados, baixar_periodo_datasus, CACHE_DIR
 
+def adicionar_rotulos(ax):
+    """
+    Adiciona rótulos de valores exatos no topo ou ponta das barras dos gráficos.
+    Usa ponto como separador de milhar no padrão brasileiro.
+    """
+    if ax.containers:
+        for container in ax.containers:
+            try:
+                # Formata com separador de milhar brasileiro (ponto)
+                labels = [f'{int(x):,}'.replace(',', '.') if x > 0 else '' for x in container.datavalues]
+                ax.bar_label(container, labels=labels, padding=3, fontsize=9)
+            except:
+                try:
+                    ax.bar_label(container, padding=3, fontsize=9)
+                except:
+                    pass
+
 # Set page configuration with premium aesthetics
 st.set_page_config(
     page_title="Portal DATASUS - Assistente Científico",
@@ -388,6 +405,7 @@ if df_raw is not None:
                     ax.set_title("Proporção por Tipo de Parto", fontweight='bold')
                     ax.set_xlabel("Tipo de Parto")
                     ax.set_ylabel("Quantidade")
+                    adicionar_rotulos(ax)
                     st.pyplot(fig)
                     
         elif 'CAUSABAS' in df_filtered.columns:
@@ -403,6 +421,7 @@ if df_raw is not None:
                 ax.set_title("Top 10 Principais CIDs de Óbitos", fontweight='bold')
                 ax.set_xlabel("Quantidade de Óbitos")
                 ax.set_ylabel("Causa CID-10")
+                adicionar_rotulos(ax)
                 st.pyplot(fig)
                 
             with col_g2:
@@ -413,6 +432,7 @@ if df_raw is not None:
                     ax.set_title("Óbitos Organizados por Sexo", fontweight='bold')
                     ax.set_xlabel("Sexo")
                     ax.set_ylabel("Óbitos")
+                    adicionar_rotulos(ax)
                     st.pyplot(fig)
                     
         elif 'DIAG_PRINC' in df_filtered.columns:
@@ -426,6 +446,7 @@ if df_raw is not None:
             ax.set_title("Top 10 Diagnósticos de Internação (CID Principal)", fontweight='bold')
             ax.set_xlabel("Quantidade de Internações")
             ax.set_ylabel("Diagnóstico Principal (CID)")
+            adicionar_rotulos(ax)
             st.pyplot(fig)
             
         # 2. General graphs by Municipality and Age
@@ -445,6 +466,7 @@ if df_raw is not None:
                 ax_mun.set_title("Concentração Geográfica (Top 10 Municípios)", fontweight='bold')
                 ax_mun.set_xlabel("Quantidade de Casos")
                 ax_mun.set_ylabel("Código IBGE do Município")
+                adicionar_rotulos(ax_mun)
                 plt.tight_layout()
                 st.pyplot(fig_mun)
             else:
@@ -485,6 +507,7 @@ if df_raw is not None:
                     ax_age.set_title(f"Distribuição por Faixas Etárias ({idade_col})", fontweight='bold')
                     ax_age.set_xlabel("Quantidade de Casos")
                     ax_age.set_ylabel("Faixa Etária")
+                    adicionar_rotulos(ax_age)
                     plt.tight_layout()
                     st.pyplot(fig_age)
                 else:
@@ -530,6 +553,13 @@ if df_raw is not None:
             ax.set_xlabel(var_linha)
             plt.xticks(rotation=45, ha='right')
             plt.legend(title=var_coluna, bbox_to_anchor=(1.05, 1), loc='upper left')
+            
+            # Adiciona rótulos de porcentagem dentro das barras empilhadas
+            if ax.containers:
+                for c in ax.containers:
+                    labels = [f'{x:.1f}%' if x > 2 else '' for x in c.datavalues]
+                    ax.bar_label(c, labels=labels, label_type='center', fontsize=8)
+                    
             plt.tight_layout()
             st.pyplot(fig)
         else:
