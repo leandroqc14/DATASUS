@@ -254,6 +254,7 @@ if metodo_busca == "💡 Linguagem Natural (Recomendado)":
                 df_raw = buscar_dados(pergunta_usuario)
                 st.session_state['df_raw'] = df_raw
                 st.session_state['search_info'] = (sistema_detectado, uf_detectada, ano_in_det, ano_fi_det, mes_detectado)
+                st.session_state['last_query'] = pergunta_usuario
             except Exception as e:
                 st.error(f"Erro ao buscar os dados: {e}")
 
@@ -272,6 +273,7 @@ else:
                 df_raw = baixar_periodo_datasus(sistema_selecionado, sigla_selecionada, uf_selecionada, ano_inicio_sel, ano_fim_sel, mes_selecionado)
                 st.session_state['df_raw'] = df_raw
                 st.session_state['search_info'] = (sistema_selecionado, uf_selecionada, ano_inicio_sel, ano_fim_sel, mes_selecionado)
+                st.session_state['last_query_manual'] = (sistema_selecionado, uf_selecionada, ano_inicio_sel, ano_fim_sel, mes_selecionado)
             except Exception as e:
                 st.error(f"Erro ao buscar os dados: {e}")
 
@@ -279,6 +281,15 @@ else:
 if 'df_raw' in st.session_state:
     df_raw = st.session_state['df_raw']
     sistema_final, uf_final, ano_inicio_final, ano_fim_final, mes_final = st.session_state['search_info']
+    
+    # Check if current input is out-of-sync with the loaded data
+    if metodo_busca == "💡 Linguagem Natural (Recomendado)":
+        if 'last_query' in st.session_state and st.session_state['last_query'] != pergunta_usuario:
+            st.warning("⚠️ **Você alterou a pergunta!** Os gráficos e dados exibidos abaixo ainda são da pesquisa anterior. Clique no botão **'🚀 Buscar no DATASUS'** acima para pesquisar e atualizar os dados.")
+    else:
+        current_manual = (sistema_selecionado, uf_selecionada, ano_inicio_sel, ano_fim_sel, mes_selecionado)
+        if 'last_query_manual' in st.session_state and st.session_state['last_query_manual'] != current_manual:
+            st.warning("⚠️ **Você alterou os filtros manuais!** Os gráficos e dados exibidos abaixo ainda são da pesquisa anterior. Clique no botão **'🚀 Buscar no DATASUS'** na tela para atualizar.")
 
 # Display results if dataset is loaded
 if df_raw is not None:
