@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import io
 import re
-from datasus_core import buscar_dados, baixar_arquivo_datasus, CACHE_DIR
+from datasus_core import buscar_dados, baixar_periodo_datasus, CACHE_DIR
 
 # Set page configuration with premium aesthetics
 st.set_page_config(
@@ -80,7 +80,7 @@ st.markdown("""
 st.markdown("""
 <div class="main-title-container">
     <h1>Assistente Científico DATASUS 🇧🇷🏥</h1>
-    <p>Baixe, processe e analise dados públicos de saúde diretamente em formato tabular e gráfico para artigos científicos e trabalhos acadêmicos.</p>
+    <p>Baixe, processe, cruze e analise dados públicos de saúde por períodos e filtros demográficos prontos para artigos acadêmicos.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -95,8 +95,6 @@ metodo_busca = st.sidebar.radio(
 uf_lista = ['SP', 'RJ', 'MG', 'RS', 'PR', 'SC', 'BA', 'PE', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'PA', 'PB', 'PI', 'RN', 'RO', 'RR', 'SE', 'TO', 'AC', 'AL', 'AP', 'AM']
 uf_lista.sort()
 
-ano_lista = list(range(2025, 1995, -1))
-
 sistemas_lista = {
     "SINASC (Nascimentos)": ("sinasc", "DN"),
     "SIM (Mortalidade/Óbitos)": ("sim", "DO"),
@@ -105,9 +103,10 @@ sistemas_lista = {
     "CNES (Leitos de Saúde)": ("cnes", "LT")
 }
 
-# Sidebar settings
+# Sidebar settings (Manual)
 uf_selecionada = 'SP'
-ano_selecionado = 2022
+ano_inicio_sel = 2022
+ano_fim_sel = 2022
 sistema_selecionado = 'sinasc'
 sigla_selecionada = 'DN'
 mes_selecionado = None
@@ -117,7 +116,10 @@ if metodo_busca == "🎛️ Filtros Manuais (Formulário)":
     sistema_selecionado, sigla_selecionada = sistemas_lista[sistema_label]
     
     uf_selecionada = st.sidebar.selectbox("Unidade Federativa (UF):", uf_lista, index=uf_lista.index('SP'))
-    ano_selecionado = st.sidebar.selectbox("Ano de Referência:", ano_lista, index=ano_lista.index(2022))
+    
+    # Year Range selection using a slider
+    ano_range = st.sidebar.slider("Período (Anos):", 1996, 2025, (2021, 2022))
+    ano_inicio_sel, ano_fim_sel = ano_range
     
     # Months are only required for monthly databases (SIH, SIA, CNES)
     if sistema_selecionado in ['sih', 'sia', 'cnes']:
@@ -139,19 +141,20 @@ st.sidebar.markdown("""
 """, unsafe_allow_html=True)
 
 # Application state
-df = None
+df_raw = None
 sistema_final = None
 uf_final = None
-ano_final = None
+ano_inicio_final = None
+ano_fim_final = None
 mes_final = None
 
 # Main section interface based on selected search method
 if metodo_busca == "💡 Linguagem Natural (Recomendado)":
     st.markdown("### 💡 O que você gostaria de pesquisar?")
     pergunta_usuario = st.text_input(
-        "Digite a sua pergunta:",
-        value="Quero analisar os nascimentos ocorridos no Acre em 2022",
-        help="Exemplos: 'buscar óbitos em SP em 2023', 'internações em Alagoas em janeiro de 2021', 'nascimentos no Rio de Janeiro em 2020'"
+        "Digite a sua pergunta (inclua o período, ex: de 2020 a 2022):",
+        value="Quero analisar os nascimentos no Acre de 2021 a 2022",
+        help="Exemplos: 'buscar óbitos em SP de 2020 a 2022', 'nascimentos no Rio de Janeiro em 2020', 'internações no Acre em 2021'"
     )
     
     # Process NLP to show preview of interpreted values
@@ -178,12 +181,21 @@ if metodo_busca == "💡 Linguagem Natural (Recomendado)":
             uf_detectada = sigla
             break
             
-    # Extract Year
-    ano_detectado = 2022
-    match_ano = re.search(r'\b(20\d{2}|19\d{2})\b', pergunta_clean)
-    if match_ano:
-        ano_detectado = int(match_ano.group(1))
-        
+    # Extract Year Range
+    ano_in_det = 2022
+    ano_fi_det = 2022
+    match_range = re.search(r'\b(20\d{2}|19\d{2})\s*(?:a|e|até|-)\s*(20\d{2}|19\d{2})\b', pergunta_clean)
+    if match_range:
+        ano_in_det = int(match_range.group(1))
+        ano_fi_det = int(match_range.group(2))
+        if ano_in_det > ano_fi_det:
+            ano_in_det, ano_fi_det = ano_fi_det, ano_in_det
+    else:
+        match_ano = re.search(r'\b(20\d{2}|19\d{2})\b', pergunta_clean)
+        if match_ano:
+            ano_in_det = int(match_ano.group(1))
+            ano_fi_det = ano_in_det
+            
     # Extract Month
     mes_detectado = None
     meses_nomes = {
@@ -210,7 +222,7 @@ if metodo_busca == "💡 Linguagem Natural (Recomendado)":
     <div style="background-color: #eef2f3; padding: 0.8rem 1.2rem; border-radius: 8px; border-left: 4px solid #203a43; font-size: 0.9rem; margin-bottom: 1.5rem;">
         <b>🔍 O assistente irá buscar:</b> Sistema: <span style="color:#00f2fe; font-weight:bold;">{sistema_detectado.upper()}</span> | 
         Estado: <b>{uf_detectada}</b> | 
-        Ano: <b>{ano_detectado}</b> | 
+        Período: <b>{ano_in_det} a {ano_fi_det}</b> | 
         Mês: <b>{mes_detectado if mes_detectado else 'Anual'}</b>
     </div>
     """, unsafe_allow_html=True)
@@ -220,119 +232,170 @@ if metodo_busca == "💡 Linguagem Natural (Recomendado)":
         btn_buscar = st.button("🚀 Buscar no DATASUS", use_container_width=True)
         
     if btn_buscar:
-        with st.spinner("Conectando ao FTP do DATASUS e processando os dados (isso pode levar de alguns segundos a 1 minuto dependendo do tamanho)..."):
+        with st.spinner("Conectando ao FTP do DATASUS e baixando o período selecionado..."):
             try:
-                df = buscar_dados(pergunta_usuario)
-                st.session_state['df_datasus'] = df
-                st.session_state['search_info'] = (sistema_detectado, uf_detectada, ano_detectado, mes_detectado)
+                df_raw = buscar_dados(pergunta_usuario)
+                st.session_state['df_raw'] = df_raw
+                st.session_state['search_info'] = (sistema_detectado, uf_detectada, ano_in_det, ano_fi_det, mes_detectado)
             except Exception as e:
                 st.error(f"Erro ao buscar os dados: {e}")
 
 else:
     # Manual mode search triggers
     st.markdown("### 🎛️ Buscar com os Filtros da Barra Lateral")
-    st.info(f"Filtros selecionados: {sistema_selecionado.upper()} ({sigla_selecionada}) para {uf_selecionada} em {ano_selecionado} " + (f"mês {mes_selecionado}" if mes_selecionado else "(ano completo)"))
+    st.info(f"Filtros selecionados: {sistema_selecionado.upper()} ({sigla_selecionada}) para {uf_selecionada} no período {ano_inicio_sel} a {ano_fim_sel} " + (f"mês {mes_selecionado}" if mes_selecionado else ""))
     
     col_btn, _ = st.columns([1, 4])
     with col_btn:
         btn_buscar_manual = st.button("🚀 Buscar no DATASUS", use_container_width=True)
         
     if btn_buscar_manual:
-        with st.spinner("Conectando e baixando dados..."):
+        with st.spinner("Baixando e compilando os dados do período..."):
             try:
-                df = baixar_arquivo_datasus(sistema_selecionado, sigla_selecionada, uf_selecionada, ano_selecionado, mes_selecionado)
-                st.session_state['df_datasus'] = df
-                st.session_state['search_info'] = (sistema_selecionado, uf_selecionada, ano_selecionado, mes_selecionado)
+                df_raw = baixar_periodo_datasus(sistema_selecionado, sigla_selecionada, uf_selecionada, ano_inicio_sel, ano_fim_sel, mes_selecionado)
+                st.session_state['df_raw'] = df_raw
+                st.session_state['search_info'] = (sistema_selecionado, uf_selecionada, ano_inicio_sel, ano_fim_sel, mes_selecionado)
             except Exception as e:
                 st.error(f"Erro ao buscar os dados: {e}")
 
 # Retrieve from session state if search completed
-if 'df_datasus' in st.session_state:
-    df = st.session_state['df_datasus']
-    sistema_final, uf_final, ano_final, mes_final = st.session_state['search_info']
+if 'df_raw' in st.session_state:
+    df_raw = st.session_state['df_raw']
+    sistema_final, uf_final, ano_inicio_final, ano_fim_final, mes_final = st.session_state['search_info']
 
 # Display results if dataset is loaded
-if df is not None:
+if df_raw is not None:
     st.markdown("---")
-    st.success("🎉 Dados carregados com sucesso!")
+    st.success(f"🎉 Dados originais carregados na memória! Total bruto: {len(df_raw):,} registros.")
     
-    # Metrics display
+    # ------------------ DYNAMIC FILTERING INTERFACE ------------------
+    st.markdown("### 🎛️ Painel de Filtros Acadêmicos (Idade e Município)")
+    
+    col_filt_1, col_filt_2 = st.columns(2)
+    df_filtered = df_raw.copy()
+    
+    # 1. Age Filtering logic based on columns present
+    idade_col = None
+    if 'Idade da Mãe' in df_raw.columns:
+        idade_col = 'Idade da Mãe'
+    elif 'Idade (Anos)' in df_raw.columns:
+        idade_col = 'Idade (Anos)'
+        
+    with col_filt_1:
+        if idade_col:
+            df_filtered[idade_col] = pd.to_numeric(df_filtered[idade_col], errors='coerce')
+            min_val = int(df_filtered[idade_col].dropna().min()) if df_filtered[idade_col].dropna().any() else 0
+            max_val = int(df_filtered[idade_col].dropna().max()) if df_filtered[idade_col].dropna().any() else 100
+            
+            # Prevent slider crash if values are equal
+            if min_val >= max_val:
+                min_val = 0
+                max_val = 100
+                
+            idade_range = st.slider(
+                f"Filtrar por Faixa Etária ({idade_col}):",
+                min_value=0,
+                max_value=120,
+                value=(max(min_val, 0), min(max_val, 110)),
+                help="Filtra a base removendo registros fora da faixa etária escolhida."
+            )
+            df_filtered = df_filtered[(df_filtered[idade_col] >= idade_range[0]) & (df_filtered[idade_col] <= idade_range[1])]
+        else:
+            st.info("ℹ️ Nenhuma coluna de idade encontrada neste sistema para filtragem automática.")
+
+    # 2. Municipality Filtering logic
+    mun_col = None
+    for c in ['CODMUNRES', 'CODMUNNASC', 'CODMUNOCOR', 'MUNIC_RES', 'MUNIC_OP']:
+        if c in df_raw.columns:
+            mun_col = c
+            break
+            
+    with col_filt_2:
+        if mun_col:
+            # Get unique values of municipality codes
+            mun_codes = sorted(df_raw[mun_col].dropna().astype(str).unique().tolist())
+            mun_selecionados = st.multiselect(
+                f"Filtrar por Município (Coluna: {mun_col}):",
+                options=mun_codes,
+                default=[],
+                help="Selecione um ou mais códigos IBGE de município para restringir os dados. Deixe vazio para não filtrar."
+            )
+            if mun_selecionados:
+                df_filtered = df_filtered[df_filtered[mun_col].astype(str).isin(mun_selecionados)]
+        else:
+            st.info("ℹ️ Nenhuma coluna de código municipal IBGE encontrada neste sistema para filtragem.")
+            
+    # ------------------ MAIN METRICS ------------------
+    st.markdown("---")
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-title">Total de Registros (Linhas)</div>
-            <div class="metric-value">{len(df):,}</div>
+            <div class="metric-title">Registros Filtrados / Total</div>
+            <div class="metric-value">{len(df_filtered):,} / {len(df_raw):,}</div>
         </div>
         """, unsafe_allow_html=True)
     with col_m2:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-title">Quantidade de Variáveis</div>
-            <div class="metric-value">{df.shape[1]}</div>
+            <div class="metric-title">Variáveis Disponíveis</div>
+            <div class="metric-value">{df_filtered.shape[1]}</div>
         </div>
         """, unsafe_allow_html=True)
     with col_m3:
         st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-title">Estado / Ano pesquisado</div>
-            <div class="metric-value">{uf_final} / {ano_final}</div>
+            <div class="metric-title">Período de Referência</div>
+            <div class="metric-value">{ano_inicio_final} - {ano_fim_final} ({uf_final})</div>
         </div>
         """, unsafe_allow_html=True)
         
-    # Tabs for navigation (Preview, Visualization, Export)
-    tab_dados, tab_graficos, tab_exportar = st.tabs(["📊 Visualizar Tabela", "📈 Análise e Gráficos", "💾 Exportar Dados"])
+    # Tabs for navigation (Preview, Visualization, Cross-tabulation, Export)
+    tab_dados, tab_graficos, tab_cruzamento, tab_exportar = st.tabs([
+        "📊 Tabela de Dados", 
+        "📈 Análises Gráficas", 
+        "🔗 Cruzamento de Variáveis (Tabela Cruzada)",
+        "💾 Exportar Base"
+    ])
     
     with tab_dados:
-        st.markdown("#### 🔍 Visualização Interativa da Tabela")
-        st.write("Filtre, pesquise ou ordene os dados usando o próprio componente abaixo:")
-        st.dataframe(df.head(200), use_container_width=True)
-        st.caption("Exibindo as primeiras 200 linhas para garantir rapidez no navegador.")
+        st.markdown("#### 🔍 Visualização dos Dados Filtrados")
+        st.write("Ordene, pesquise ou inspecione a tabela de dados tratada com nomes legíveis abaixo:")
+        st.dataframe(df_filtered.head(200), use_container_width=True)
+        st.caption("Exibindo as primeiras 200 linhas da tabela filtrada para desempenho rápido no navegador.")
         
     with tab_graficos:
         st.markdown("#### 📊 Análises Gráficas Científicas")
         
         # 1. Custom graphs based on the loaded system
-        if 'IDADEMAE' in df.columns:
-            # SINASC births data
-            st.info("💡 Detectado conjunto de dados de NASCIMENTOS (SINASC). Gerando visualizações recomendadas:")
-            
-            # Prepare data
-            df['IDADEMAE'] = pd.to_numeric(df['IDADEMAE'], errors='coerce')
-            
+        if 'Idade da Mãe' in df_filtered.columns:
+            st.info("💡 Detectado conjunto de dados de NASCIMENTOS (SINASC).")
             col_g1, col_g2 = st.columns(2)
             with col_g1:
                 st.markdown("##### Distribuição de Idades das Mães")
                 fig, ax = plt.subplots(figsize=(8, 4.5))
-                sns.histplot(data=df, x='IDADEMAE', kde=True, color='teal', bins=25, ax=ax)
+                sns.histplot(data=df_filtered, x='Idade da Mãe', kde=True, color='teal', bins=20, ax=ax)
                 ax.set_title("Idade das Mães no Nascimento", fontweight='bold')
                 ax.set_xlabel("Idade da Mãe (Anos)")
-                ax.set_ylabel("Quantidade de Casos")
+                ax.set_ylabel("Casos")
                 st.pyplot(fig)
                 
             with col_g2:
                 st.markdown("##### Proporção por Tipo de Parto")
-                if 'PARTO' in df.columns:
-                    parto_labels = {'1': 'Vaginal', '2': 'Cesáreo'}
-                    df['Tipo_Parto'] = df['PARTO'].astype(str).map(parto_labels).fillna('Não Informado/Outros')
-                    
+                if 'Tipo de Parto' in df_filtered.columns:
                     fig, ax = plt.subplots(figsize=(8, 4.5))
-                    sns.countplot(data=df, x='Tipo_Parto', palette='Set2', hue='Tipo_Parto', legend=False, ax=ax)
+                    sns.countplot(data=df_filtered, x='Tipo de Parto', palette='Set2', hue='Tipo de Parto', legend=False, ax=ax)
                     ax.set_title("Proporção por Tipo de Parto", fontweight='bold')
                     ax.set_xlabel("Tipo de Parto")
                     ax.set_ylabel("Quantidade")
                     st.pyplot(fig)
-                else:
-                    st.warning("Variável 'PARTO' não encontrada no banco de dados.")
                     
-        elif 'CAUSABAS' in df.columns:
-            # SIM mortality data
-            st.info("💡 Detectado conjunto de dados de MORTALIDADE (SIM). Gerando visualizações recomendadas:")
-            
+        elif 'CAUSABAS' in df_filtered.columns:
+            st.info("💡 Detectado conjunto de dados de MORTALIDADE (SIM).")
             col_g1, col_g2 = st.columns(2)
             with col_g1:
                 st.markdown("##### Top 10 Causas de Óbitos (CID-10)")
-                top10_morte = df['CAUSABAS'].value_counts().head(10).reset_index()
+                top10_morte = df_filtered['CAUSABAS'].value_counts().head(10).reset_index()
                 top10_morte.columns = ['CID-10', 'Óbitos']
                 
                 fig, ax = plt.subplots(figsize=(8, 4.5))
@@ -344,25 +407,18 @@ if df is not None:
                 
             with col_g2:
                 st.markdown("##### Distribuição de Óbitos por Sexo")
-                if 'SEXO' in df.columns:
-                    sexo_labels = {'1': 'Masculino', '2': 'Feminino', '0': 'Ignorado'}
-                    df['Sexo_Label'] = df['SEXO'].astype(str).map(sexo_labels).fillna('Não Informado')
-                    
+                if 'Sexo' in df_filtered.columns:
                     fig, ax = plt.subplots(figsize=(8, 4.5))
-                    sns.countplot(data=df, x='Sexo_Label', palette='coolwarm', hue='Sexo_Label', legend=False, ax=ax)
+                    sns.countplot(data=df_filtered, x='Sexo', palette='coolwarm', hue='Sexo', legend=False, ax=ax)
                     ax.set_title("Óbitos Organizados por Sexo", fontweight='bold')
                     ax.set_xlabel("Sexo")
                     ax.set_ylabel("Óbitos")
                     st.pyplot(fig)
-                else:
-                    st.warning("Variável 'SEXO' não encontrada no banco de dados.")
                     
-        elif 'DIAG_PRINC' in df.columns:
-            # SIHSUS hospitalization data
-            st.info("💡 Detectado conjunto de dados de INTERNAÇÕES HOSPITALARES (SIHSUS). Gerando visualizações recomendadas:")
-            
+        elif 'DIAG_PRINC' in df_filtered.columns:
+            st.info("💡 Detectado conjunto de dados de INTERNAÇÕES HOSPITALARES (SIHSUS).")
             st.markdown("##### Top 10 Diagnósticos Principais de Internação (CIDs)")
-            top_internacoes = df['DIAG_PRINC'].value_counts().head(10).reset_index()
+            top_internacoes = df_filtered['DIAG_PRINC'].value_counts().head(10).reset_index()
             top_internacoes.columns = ['Diagnóstico (CID)', 'Internações']
             
             fig, ax = plt.subplots(figsize=(10, 5))
@@ -371,53 +427,69 @@ if df is not None:
             ax.set_xlabel("Quantidade de Internações")
             ax.set_ylabel("Diagnóstico Principal (CID)")
             st.pyplot(fig)
-            
-        else:
-            # Fallback for other data structures
-            st.info("📊 Dados carregados com sucesso. Selecione variáveis nos eixos abaixo para fazer uma exploração personalizada:")
-            
-            numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-            categorical_cols = df.select_dtypes(exclude=['number']).columns.tolist()
-            
-            if len(categorical_cols) > 0 and len(df) > 0:
-                col_vars1, col_vars2 = st.columns(2)
-                with col_vars1:
-                    col_x = st.selectbox("Escolha a Variável Categoria (Eixo Y):", categorical_cols[:10])
-                with col_vars2:
-                    top_n = st.slider("Quantidade de categorias:", 5, 20, 10)
-                    
-                top_data = df[col_x].value_counts().head(top_n).reset_index()
-                top_data.columns = [col_x, 'Frequência']
+
+    with tab_cruzamento:
+        st.markdown("#### 🔗 Cruzamento de Variáveis Demográficas e Clínicas")
+        st.write("Selecione duas variáveis para cruzar os dados. O sistema irá gerar tabelas de contingência absolutas e percentuais, além de gráficos empilhados.")
+        
+        # Categorical columns list generated in decodificar_dados
+        colunas_cruzamento = [c for c in [
+            'Sexo', 'Tipo de Parto', 'Raça/Cor', 'Escolaridade da Mãe', 
+            'Estado Civil da Mãe', 'Local da Ocorrência', 'ANO_DATA'
+        ] if c in df_filtered.columns]
+        
+        if len(colunas_cruzamento) >= 2:
+            col_cr_1, col_cr_2 = st.columns(2)
+            with col_cr_1:
+                var_linha = st.selectbox("Variável nas Linhas (Grupo Comparativo):", colunas_cruzamento, index=0)
+            with col_cr_2:
+                # Exclude the selected row variable from columns dropdown
+                colunas_col_opcoes = [c for c in colunas_cruzamento if c != var_linha]
+                var_coluna = st.selectbox("Variável nas Colunas (Desfecho):", colunas_col_opcoes, index=0)
                 
-                fig, ax = plt.subplots(figsize=(8, 4.5))
-                sns.barplot(data=top_data, x='Frequência', y=col_x, palette='Blues_r', hue=col_x, legend=False, ax=ax)
-                ax.set_title(f"Distribuição de Frequência de '{col_x}'", fontweight='bold')
-                st.pyplot(fig)
-            else:
-                st.warning("Variáveis não estruturadas de forma categórica para plotagem automática.")
+            st.markdown("##### 1. Tabela Cruzada de Frequência Absoluta (Contagem de Casos)")
+            crosstab_abs = pd.crosstab(df_filtered[var_linha], df_filtered[var_coluna], margins=True, margins_name="Total")
+            st.dataframe(crosstab_abs, use_container_width=True)
+            
+            st.markdown("##### 2. Tabela Cruzada de Proporção Relativa (Porcentagem por Linha)")
+            st.write("Ideal para comparar proporções. Exibe a distribuição percentual do desfecho dentro de cada grupo comparativo.")
+            crosstab_pct = pd.crosstab(df_filtered[var_linha], df_filtered[var_coluna], normalize='index') * 100
+            # Format percentage display
+            crosstab_pct_formatted = crosstab_pct.style.format("{:.2f}%")
+            st.dataframe(crosstab_pct_formatted, use_container_width=True)
+            
+            st.markdown("##### 3. Gráfico de Barras Empilhadas de Proporção")
+            fig, ax = plt.subplots(figsize=(10, 5))
+            crosstab_pct.plot(kind='bar', stacked=True, colormap='viridis', ax=ax)
+            ax.set_title(f"Distribuição Relativa de '{var_coluna}' por '{var_linha}'", fontweight='bold', fontsize=12)
+            ax.set_ylabel("Proporção (%)")
+            ax.set_xlabel(var_linha)
+            plt.xticks(rotation=45, ha='right')
+            plt.legend(title=var_coluna, bbox_to_anchor=(1.05, 1), loc='upper left')
+            st.tight_layout()
+            st.pyplot(fig)
+        else:
+            st.warning("⚠️ O banco de dados carregado não possui colunas categóricas decodificadas suficientes para permitir cruzamento estatístico.")
 
     with tab_exportar:
         st.markdown("#### 💾 Exportar e Salvar Base Tratada")
-        st.write("Exporte os dados completos tratados localmente para poder abri-los em softwares como Excel, SPSS ou RStudio.")
+        st.write("Faça o download do arquivo CSV completo. Os dados já contêm todas as decodificações de texto e os filtros selecionados acima.")
         
         # Memory buffer to avoid writing file on host disk again (keeps it fast)
         csv_buffer = io.BytesIO()
-        df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
+        df_filtered.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
         csv_buffer.seek(0)
         
-        nome_arquivo_export = f"datasus_{sistema_final}_{uf_final}_{ano_final}"
-        if mes_final:
-            nome_arquivo_export += f"_{mes_final:02d}"
-        nome_arquivo_export += ".csv"
+        nome_arquivo_export = f"datasus_{sistema_final}_{uf_final}_{ano_inicio_final}_a_{ano_fim_final}.csv"
         
         st.download_button(
-            label="📥 Baixar Base Completa em CSV (Excel)",
+            label="📥 Baixar Base Filtrada em CSV (Excel)",
             data=csv_buffer,
             file_name=nome_arquivo_export,
             mime="text/csv",
             use_container_width=True
         )
-        st.success(f"Arquivo pronto para download: `{nome_arquivo_export}`")
+        st.success(f"Arquivo de exportação gerado: `{nome_arquivo_export}`")
 
 # Footer
 st.markdown("""

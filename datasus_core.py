@@ -13,7 +13,7 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
     """
-    Downloads a .dbc file from DATASUS FTP, decompresses it to .dbf,
+    Downloads a single .dbc file from DATASUS FTP, decompresses it to .dbf,
     loads it into a Pandas DataFrame, and saves it as a Parquet file for caching.
     """
     uf = uf.upper()
@@ -127,10 +127,157 @@ def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
         if os.path.exists(caminho_local_dbf): os.remove(caminho_local_dbf)
         raise RuntimeError(f"Erro ao acessar dados do DATASUS: {e}")
 
+def baixar_periodo_datasus(sistema, sigla_arquivo, uf, ano_inicio, ano_fim, mes=None):
+    """
+    Downloads and concatenates DATASUS data for a range of years [ano_inicio, ano_fim].
+    """
+    dfs = []
+    anos_range = range(int(ano_inicio), int(ano_fim) + 1)
+    
+    for ano in anos_range:
+        try:
+            print(f"\n--- Processando Ano: {ano} ---")
+            df_ano = baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes)
+            if df_ano is not None and not df_ano.empty:
+                # Add a year column to identify the record year
+                df_ano['ANO_DATA'] = ano
+                dfs.append(df_ano)
+        except Exception as e:
+            print(f"⚠️ Erro ao baixar dados do ano {ano}: {e}. Pulando este ano.")
+            
+    if not dfs:
+        raise RuntimeError(f"Nenhum dado pôde ser baixado para o período {ano_inicio} a {ano_fim} no estado {uf}.")
+        
+    # Concatenate all datasets
+    print("\n🔄 Concatenando os dados de múltiplos anos...")
+    df_final = pd.concat(dfs, ignore_index=True)
+    
+    # Decodificar dados e rótulos
+    df_final = decodificar_dados(df_final, sistema)
+    
+    return df_final
+
+def decodificar_idade_sim(idade_raw):
+    """
+    Decodes DATASUS SIM age values to actual years.
+    SIM age coding:
+    - 1st digit: 1=Minutes, 2=Hours, 3=Days, 4=Months, 5=Years.
+    - 2nd & 3rd digits: quantity.
+    """
+    try:
+        idade_str = str(idade_raw).strip()
+        if not idade_str or pd.isna(idade_raw) or idade_str == '':
+            return None
+        
+        # Keep numeric
+        val = float(idade_raw)
+        if val >= 500: # 5xx represents years
+            return int(val - 500)
+        elif val >= 100: # 1xx, 2xx, 3xx, 4xx are under 1 year (minutes, hours, days, months)
+            return 0
+        return int(val) # fallback if already parsed/raw
+    except:
+        return None
+
+def decodificar_dados(df, sistema):
+    """
+    Maps cryptic DATASUS codes to clear human-readable Portuguese labels.
+    """
+    df = df.copy()
+    sistema = sistema.lower()
+    
+    # Common mappings
+    sexo_map = {'1': 'Masculino', '2': 'Feminino', '0': 'Ignorado', '9': 'Ignorado'}
+    raca_map = {'1': 'Branca', '2': 'Preta', '3': 'Amarela', '4': 'Parda', '5': 'Indígena', '9': 'Ignorado'}
+    parto_map = {'1': 'Vaginal', '2': 'Cesáreo', '9': 'Ignorado'}
+    
+    if sistema == 'sinasc':
+        # Sex
+        if 'SEXO' in df.columns:
+            df['Sexo'] = df['SEXO'].astype(str).map(sexo_map).fillna('Não informado')
+            
+        # Parturition type
+        if 'PARTO' in df.columns:
+            df['Tipo de Parto'] = df['PARTO'].astype(str).map(parto_map).fillna('Não informado')
+            
+        # Race/Skin Color
+        if 'RACACOR' in df.columns:
+            df['Raça/Cor'] = df['RACACOR'].astype(str).map(raca_map).fillna('Não informado')
+            
+        # Mother's Education level
+        if 'ESCMAE' in df.columns:
+            esc_map = {
+                '1': 'Nenhuma', '2': '1 a 3 anos', '3': '4 a 7 anos',
+                '4': '8 a 11 anos', '5': '12 anos ou mais', '9': 'Ignorado'
+            }
+            df['Escolaridade da Mãe'] = df['ESCMAE'].astype(str).map(esc_map).fillna('Não informado')
+            
+        # Mother's Marital status
+        if 'ESTCIVMAE' in df.columns:
+            civil_map = {
+                '1': 'Solteira', '2': 'Casada', '3': 'Viúva',
+                '4': 'Divorciada/União Estável', '5': 'Outro', '9': 'Ignorado'
+            }
+            df['Estado Civil da Mãe'] = df['ESTCIVMAE'].astype(str).map(civil_map).fillna('Não informado')
+            
+        # Clean Mother's Age
+        if 'IDADEMAE' in df.columns:
+            df['Idade da Mãe'] = pd.to_numeric(df['IDADEMAE'], errors='coerce')
+            
+        # Birth Weight
+        if 'PESO' in df.columns:
+            df['Peso ao Nascer (g)'] = pd.to_numeric(df['PESO'], errors='coerce')
+
+    elif sistema == 'sim':
+        # Sex
+        if 'SEXO' in df.columns:
+            df['Sexo'] = df['SEXO'].astype(str).map(sexo_map).fillna('Não informado')
+            
+        # Race/Skin Color
+        if 'RACACOR' in df.columns:
+            df['Raça/Cor'] = df['RACACOR'].astype(str).map(raca_map).fillna('Não informado')
+            
+        # Death Location
+        if 'LOCOCOR' in df.columns:
+            loc_map = {
+                '1': 'Hospital', '2': 'Outro Estab. Saúde', '3': 'Domicílio',
+                '4': 'Via Pública', '5': 'Outros', '9': 'Ignorado'
+            }
+            df['Local da Ocorrência'] = df['LOCOCOR'].astype(str).map(loc_map).fillna('Não informado')
+            
+        # Death Age Parsing
+        if 'IDADE' in df.columns:
+            df['Idade (Anos)'] = df['IDADE'].apply(decodificar_idade_sim)
+
+    elif sistema == 'sih':
+        # Sex
+        if 'SEXO' in df.columns:
+            df['Sexo'] = df['SEXO'].astype(str).map(sexo_map).fillna('Não informado')
+            
+        # Race/Skin Color in SIH uses different coding: '01', '02', '03'
+        if 'RACA_COR' in df.columns:
+            raca_sih_map = {'01': 'Branca', '02': 'Preta', '03': 'Parda', '04': 'Amarela', '05': 'Indígena', '99': 'Ignorado'}
+            df['Raça/Cor'] = df['RACA_COR'].astype(str).str.zfill(2).map(raca_sih_map).fillna('Não informado')
+            
+        # Age
+        if 'IDADE' in df.columns:
+            # SIH age is usually parsed directly but can contain unit codes
+            df['Idade (Anos)'] = pd.to_numeric(df['IDADE'], errors='coerce')
+            
+        # Stay length in days
+        if 'DIAS_PERM' in df.columns:
+            df['Dias de Internação'] = pd.to_numeric(df['DIAS_PERM'], errors='coerce')
+            
+        # Total cost
+        if 'VAL_TOT' in df.columns:
+            df['Custo Total (R$)'] = pd.to_numeric(df['VAL_TOT'], errors='coerce')
+
+    return df
+
 def buscar_dados(pergunta):
     """
-    Parses a natural language question to extract UF, year, month, and system,
-    then triggers the download and returns the loaded DataFrame.
+    Parses a natural language question to extract UF, year range, month, and system,
+    then triggers the download and returns the loaded, concatenated DataFrame.
     """
     pergunta_clean = pergunta.lower().strip()
     
@@ -160,20 +307,36 @@ def buscar_dados(pergunta):
         print("⚠️ Estado não detectado. Usando 'SP' como padrão.")
         uf = 'SP'
         
-    # 2. Year Mapping (4 digits or 2 digits)
-    ano = None
-    match_ano = re.search(r'\b(20\d{2}|19\d{2})\b', pergunta_clean)
-    if match_ano:
-        ano = int(match_ano.group(1))
+    # 2. Year Range Parsing (e.g. "de 2020 a 2022" or "2019-2021" or "2020 e 2021")
+    ano_inicio = None
+    ano_fim = None
+    
+    # Check for range: year1 to/and year2
+    match_range = re.search(r'\b(20\d{2}|19\d{2})\s*(?:a|à|e|até|atoc|ou|-)\s*(20\d{2}|19\d{2})\b', pergunta_clean)
+    if match_range:
+        ano_inicio = int(match_range.group(1))
+        ano_fim = int(match_range.group(2))
+        # Ensure correct order
+        if ano_inicio > ano_fim:
+            ano_inicio, ano_fim = ano_fim, ano_inicio
     else:
-        match_ano_2 = re.search(r'\b(\d{2})\b', pergunta_clean)
-        if match_ano_2:
-            digitos = int(match_ano_2.group(1))
-            ano = 2000 + digitos if digitos <= 26 else 1900 + digitos
-            
-    if not ano:
+        # Check for single year
+        match_ano = re.search(r'\b(20\d{2}|19\d{2})\b', pergunta_clean)
+        if match_ano:
+            ano_inicio = int(match_ano.group(1))
+            ano_fim = ano_inicio
+        else:
+            match_ano_2 = re.search(r'\b(\d{2})\b', pergunta_clean)
+            if match_ano_2:
+                digitos = int(match_ano_2.group(1))
+                ano_val = 2000 + digitos if digitos <= 26 else 1900 + digitos
+                ano_inicio = ano_val
+                ano_fim = ano_val
+                
+    if not ano_inicio:
         print("⚠️ Ano não detectado. Usando 2022 como padrão.")
-        ano = 2022
+        ano_inicio = 2022
+        ano_fim = 2022
         
     # 3. Month Mapping (useful for monthly databases)
     mes = None
@@ -223,5 +386,5 @@ def buscar_dados(pergunta):
         sistema = 'sim'
         sigla_arquivo = 'DO'
         
-    print(f"🔍 NLP parsed: Sistema={sistema.upper()} ({sigla_arquivo}), Estado={uf}, Ano={ano}, Mês={mes}")
-    return baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes)
+    print(f"🔍 NLP parsed: Sistema={sistema.upper()} ({sigla_arquivo}), Estado={uf}, Período={ano_inicio} a {ano_fim}, Mês={mes}")
+    return baixar_periodo_datasus(sistema, sigla_arquivo, uf, ano_inicio, ano_fim, mes)
