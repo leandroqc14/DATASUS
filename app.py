@@ -388,11 +388,12 @@ if df_raw is not None:
         </div>
         """, unsafe_allow_html=True)
         
-    # Tabs for navigation (Preview, Visualization, Cross-tabulation, Export)
-    tab_dados, tab_graficos, tab_cruzamento, tab_exportar = st.tabs([
+    # Tabs for navigation (Preview, Visualization, Cross-tabulation, CID-10 Dictionary, Export)
+    tab_dados, tab_graficos, tab_cruzamento, tab_cid10, tab_exportar = st.tabs([
         "📊 Tabela de Dados", 
         "📈 Análises Gráficas", 
         "🔗 Cruzamento de Variáveis (Tabela Cruzada)",
+        "📖 Dicionário CID-10",
         "💾 Exportar Base"
     ])
     
@@ -587,6 +588,70 @@ if df_raw is not None:
             st.pyplot(fig)
         else:
             st.warning("⚠️ O banco de dados carregado não possui colunas categóricas decodificadas suficientes para permitir cruzamento estatístico.")
+
+    with tab_cid10:
+        st.markdown("#### 📖 Navegador e Dicionário de CIDs (CID-10)")
+        st.write("Consulte os códigos e descrições oficiais da Classificação Internacional de Doenças (CID-10) em português.")
+        
+        # Load CID-10 dictionary
+        from datasus_core import carregar_cid10_dict
+        cid_dict = carregar_cid10_dict()
+        
+        if cid_dict:
+            # Reconstruct list of codes (filtering out duplicates without dots)
+            cid_list = []
+            for code, name in cid_dict.items():
+                if '.' in code or len(code) == 3:
+                    cid_list.append({'Código': code, 'Descrição': name})
+            
+            df_cid = pd.DataFrame(cid_list).drop_duplicates().sort_values('Código')
+            
+            # Search inputs
+            col_search_1, col_search_2 = st.columns([2, 1])
+            with col_search_1:
+                busca_cid = st.text_input(
+                    "Digite um Código ou Termo Clínico (Ex: M80, Osteoporose, Fratura):",
+                    value="M80",
+                    help="Digite para pesquisar. Ex: 'M80' retornará a categoria de osteoporose com fratura e todas as suas etiologias (M80.0 a M80.9)."
+                )
+            with col_search_2:
+                tipo_filtro = st.selectbox(
+                    "Buscar em:",
+                    ["Ambos (Código ou Descrição)", "Apenas Código", "Apenas Descrição"]
+                )
+                
+            if busca_cid:
+                busca_clean = busca_cid.lower().strip()
+                
+                # Apply filter based on selected type
+                if tipo_filtro == "Apenas Código":
+                    df_result = df_cid[df_cid['Código'].str.lower().str.contains(busca_clean)]
+                elif tipo_filtro == "Apenas Descrição":
+                    df_result = df_cid[df_cid['Descrição'].str.lower().str.contains(busca_clean)]
+                else:
+                    df_result = df_cid[
+                        df_cid['Código'].str.lower().str.contains(busca_clean) | 
+                        df_cid['Descrição'].str.lower().str.contains(busca_clean)
+                    ]
+                    
+                st.markdown(f"Encontrados **{len(df_result)}** códigos correspondentes na CID-10:")
+                st.dataframe(df_result, use_container_width=True, hide_index=True)
+                
+                # Display structural explanation specifically for M80 if search contains M80
+                if 'm80' in busca_clean:
+                    st.markdown("""
+                    > 💡 **Estrutura de Osteoporose com Fratura Patológica (M80):**
+                    > *   **M80.0**: Osteoporose pós-menopausa com fratura patológica
+                    > *   **M80.1**: Osteoporose pós-ooforectomia com fratura patológica
+                    > *   **M80.2**: Osteoporose de desuso com fratura patológica
+                    > *   **M80.3**: Osteoporose por má-absorção pós-cirúrgica com fratura patológica
+                    > *   **M80.4**: Osteoporose induzida por drogas com fratura patológica
+                    > *   **M80.5**: Osteoporose idiopática com fratura patológica
+                    > *   **M80.8**: Outra osteoporose com fratura patológica
+                    > *   **M80.9**: Osteoporose com fratura patológica, não especificada
+                    """)
+        else:
+            st.warning("⚠️ Não foi possível carregar a base de dados da CID-10.")
 
     with tab_exportar:
         st.markdown("#### 💾 Exportar e Salvar Base Tratada")

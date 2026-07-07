@@ -36,7 +36,7 @@ def carregar_municipios_dict():
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
         res.raise_for_status()
         data = res.json()
-            
+        
         mapping = {}
         for item in data:
             id_7 = str(item['id'])
@@ -63,6 +63,49 @@ def carregar_municipios_dict():
         return mapping
     except Exception as e:
         print(f"[Aviso] Falha ao baixar lista de municipios do IBGE: {e}")
+        return {}
+
+def carregar_cid10_dict():
+    """
+    Downloads the official CID-10 database in Portuguese, maps codes (e.g. 'M80.0' and 'M800')
+    to their text descriptions, and caches it in a JSON file.
+    """
+    caminho_json = os.path.join(CACHE_DIR, 'cid10.json')
+    
+    # If cache file exists, read it
+    if os.path.exists(caminho_json):
+        try:
+            with open(caminho_json, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[Aviso] Erro ao ler cache da CID-10: {e}. Recriando...")
+            
+    # Download from reliable public raw github source
+    url = "https://raw.githubusercontent.com/QualitasGit/static_data/master/cid10.json"
+    print("[CID-10] Baixando banco de dados da CID-10...")
+    try:
+        import requests
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        res.raise_for_status()
+        data = res.json()
+        
+        mapping = {}
+        for item in data:
+            codigo_raw = item.get('codigo', '')
+            nome = item.get('nome', '')
+            if codigo_raw:
+                codigo_clean = codigo_raw.replace('.', '').strip().upper()
+                mapping[codigo_raw.upper()] = nome
+                mapping[codigo_clean] = nome
+                
+        # Save to local cache
+        with open(caminho_json, 'w', encoding='utf-8') as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=1)
+            
+        print(f"[CID-10] Sucesso ao cachear {len(mapping)} termos da CID-10.")
+        return mapping
+    except Exception as e:
+        print(f"[Aviso] Falha ao obter banco da CID-10: {e}")
         return {}
 
 def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
@@ -252,8 +295,9 @@ def decodificar_dados(df, sistema):
     df = df.copy()
     sistema = sistema.lower()
     
-    # Load municipality mapping dictionary
+    # Load mapping dictionaries
     mun_dict = carregar_municipios_dict()
+    cid_dict = carregar_cid10_dict()
     
     # Common mappings
     sexo_map = {'1': 'Masculino', '2': 'Feminino', '0': 'Ignorado', '9': 'Ignorado'}
@@ -269,8 +313,30 @@ def decodificar_dados(df, sistema):
             
     if mun_col:
         print(f"[Sucesso] Decodificando codigos municipais da coluna: {mun_col}")
-        # Clean codes and map them to names
         df['Município'] = df[mun_col].apply(limpar_codigo_municipio).map(mun_dict).fillna(df[mun_col].astype(str))
+        
+    # Auto-decode CID-10 diagnosis/cause if present
+    cid_col = None
+    for c in ['CAUSABAS', 'DIAG_PRINC', 'AP_CIDPRI']:
+        if c in df.columns:
+            cid_col = c
+            break
+            
+    if cid_col:
+        print(f"[Sucesso] Decodificando códigos CID-10 da coluna: {cid_col}")
+        def formatar_cid(val):
+            if pd.isna(val) or val == '':
+                return val
+            val_clean = str(val).strip().upper()
+            descricao = cid_dict.get(val_clean)
+            if not descricao:
+                val_no_dot = val_clean.replace('.', '')
+                descricao = cid_dict.get(val_no_dot)
+            if descricao:
+                return f"{val_clean} - {descricao}"
+            return val_clean
+            
+        df['Diagnóstico/Causa'] = df[cid_col].apply(formatar_cid)
     
     if sistema == 'sinasc':
         # Sex
