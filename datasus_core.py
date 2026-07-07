@@ -2,6 +2,8 @@ import os
 import re
 import ftplib
 import tempfile
+import json
+import urllib.request
 import pandas as pd
 from dbctodbf import DBCDecompress
 from dbfread import DBF
@@ -10,6 +12,57 @@ from tqdm import tqdm
 # Local directory for caching downloaded files in Parquet format
 CACHE_DIR = os.path.join(os.getcwd(), 'datasus_cache')
 os.makedirs(CACHE_DIR, exist_ok=True)
+
+def carregar_municipios_dict():
+    """
+    Downloads the list of all Brazilian municipalities from the official IBGE API,
+    maps 6-digit codes to names (e.g. '355030' -> 'São Paulo (SP)'), and caches it in a JSON file.
+    """
+    caminho_json = os.path.join(CACHE_DIR, 'municipios.json')
+    
+    # If cache file exists, read it
+    if os.path.exists(caminho_json):
+        try:
+            with open(caminho_json, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"⚠️ Erro ao ler cache de municípios: {e}. Recriando...")
+            
+    # If not in cache, download from IBGE API
+    url = "https://servicodados.ibge.gov.br/api/v1/localidades/municipios"
+    print("🌐 Downloading municipality list from IBGE API...")
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            
+        mapping = {}
+        for item in data:
+            id_7 = str(item['id'])
+            id_6 = id_7[:6] # DATASUS uses 6-digit codes (excluding the 7th verification digit)
+            nome = item['nome']
+            
+            # Safe traversal for UF
+            uf = "??"
+            try:
+                if item.get('microrregiao') and item['microrregiao'].get('mesorregiao') and item['microrregiao']['mesorregiao'].get('UF'):
+                    uf = item['microrregiao']['mesorregiao']['UF']['sigla']
+                elif item.get('regiao-imediata') and item['regiao-imediata'].get('regiao-intermediaria') and item['regiao-imediata']['regiao-intermediaria'].get('UF'):
+                    uf = item['regiao-imediata']['regiao-intermediaria']['UF']['sigla']
+            except:
+                pass
+                
+            mapping[id_6] = f"{nome} ({uf})"
+            
+        # Save to local cache
+        with open(caminho_json, 'w', encoding='utf-8') as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=1)
+            
+        print(f"✅ Cached {len(mapping)} municipalities locally.")
+        return mapping
+    except Exception as e:
+        print(f"⚠️ Falha ao baixar lista de municípios do IBGE: {e}")
+        return {}
 
 def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
     """
@@ -179,6 +232,18 @@ def decodificar_idade_sim(idade_raw):
     except:
         return None
 
+def limpar_codigo_municipio(val):
+    """
+    Cleans municipality code values, converting float/int representations
+    (like 355030.0) into a standard 6-digit string representation.
+    """
+    if pd.isna(val) or val == '':
+        return None
+    val_str = str(val).strip().split('.')[0]
+    if len(val_str) > 6:
+        val_str = val_str[:6]
+    return val_str.zfill(6)
+
 def decodificar_dados(df, sistema):
     """
     Maps cryptic DATASUS codes to clear human-readable Portuguese labels.
@@ -186,10 +251,25 @@ def decodificar_dados(df, sistema):
     df = df.copy()
     sistema = sistema.lower()
     
+    # Load municipality mapping dictionary
+    mun_dict = carregar_municipios_dict()
+    
     # Common mappings
     sexo_map = {'1': 'Masculino', '2': 'Feminino', '0': 'Ignorado', '9': 'Ignorado'}
     raca_map = {'1': 'Branca', '2': 'Preta', '3': 'Amarela', '4': 'Parda', '5': 'Indígena', '9': 'Ignorado'}
     parto_map = {'1': 'Vaginal', '2': 'Cesáreo', '9': 'Ignorado'}
+    
+    # Auto-decode municipality if a relevant column is present
+    mun_col = None
+    for c in ['CODMUNRES', 'CODMUNNASC', 'CODMUNOCOR', 'MUNIC_RES', 'MUNIC_OP']:
+        if c in df.columns:
+            mun_col = c
+            break
+            
+    if mun_col:
+        print(f"📍 Decodificando códigos municipais da coluna: {mun_col}")
+        # Clean codes and map them to names
+        df['Município'] = df[mun_col].apply(limpar_codigo_municipio).map(mun_dict).fillna(df[mun_col].astype(str))
     
     if sistema == 'sinasc':
         # Sex

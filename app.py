@@ -328,19 +328,19 @@ if df_raw is not None:
             break
             
     with col_filt_2:
-        if mun_col:
-            # Get unique values of municipality codes
-            mun_codes = sorted(df_raw[mun_col].dropna().astype(str).unique().tolist())
+        if 'Município' in df_raw.columns:
+            # Get unique values of decoded municipality names
+            mun_names = sorted(df_raw['Município'].dropna().astype(str).unique().tolist())
             mun_selecionados = st.multiselect(
-                f"Filtrar por Município (Coluna: {mun_col}):",
-                options=mun_codes,
+                "Filtrar por Município:",
+                options=mun_names,
                 default=[],
-                help="Selecione um ou mais códigos IBGE de município para restringir os dados. Deixe vazio para não filtrar."
+                help="Selecione um ou mais municípios para filtrar os dados. Deixe vazio para analisar todos."
             )
             if mun_selecionados:
-                df_filtered = df_filtered[df_filtered[mun_col].astype(str).isin(mun_selecionados)]
+                df_filtered = df_filtered[df_filtered['Município'].astype(str).isin(mun_selecionados)]
         else:
-            st.info("ℹ️ Nenhuma coluna de código municipal IBGE encontrada neste sistema para filtragem.")
+            st.info("ℹ️ Nenhuma coluna de município encontrada neste sistema para filtragem.")
             
     # ------------------ MAIN METRICS ------------------
     st.markdown("---")
@@ -456,16 +456,16 @@ if df_raw is not None:
         col_ad_1, col_ad_2 = st.columns(2)
         
         with col_ad_1:
-            if mun_col:
+            if 'Município' in df_filtered.columns:
                 st.markdown("##### Top 10 Municípios com Mais Casos")
-                top_muns = df_filtered[mun_col].value_counts().head(10).reset_index()
-                top_muns.columns = ['Código Município', 'Ocorrências']
+                top_muns = df_filtered['Município'].value_counts().head(10).reset_index()
+                top_muns.columns = ['Município', 'Ocorrências']
                 
                 fig_mun, ax_mun = plt.subplots(figsize=(8, 4.5))
-                sns.barplot(data=top_muns, x='Ocorrências', y='Código Município', palette='Blues_r', hue='Código Município', legend=False, ax=ax_mun)
+                sns.barplot(data=top_muns, x='Ocorrências', y='Município', palette='Blues_r', hue='Município', legend=False, ax=ax_mun)
                 ax_mun.set_title("Concentração Geográfica (Top 10 Municípios)", fontweight='bold')
                 ax_mun.set_xlabel("Quantidade de Casos")
-                ax_mun.set_ylabel("Código IBGE do Município")
+                ax_mun.set_ylabel("Município")
                 adicionar_rotulos(ax_mun)
                 plt.tight_layout()
                 st.pyplot(fig_mun)
@@ -522,7 +522,7 @@ if df_raw is not None:
         # Categorical columns list generated in decodificar_dados
         colunas_cruzamento = [c for c in [
             'Sexo', 'Tipo de Parto', 'Raça/Cor', 'Escolaridade da Mãe', 
-            'Estado Civil da Mãe', 'Local da Ocorrência', 'ANO_DATA'
+            'Estado Civil da Mãe', 'Local da Ocorrência', 'ANO_DATA', 'Município'
         ] if c in df_filtered.columns]
         
         if len(colunas_cruzamento) >= 2:
