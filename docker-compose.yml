@@ -1,13 +1,9 @@
-version: '3.8'
-
 services:
   datasus-helper:
     build: .
     container_name: datasus_helper_app
     ports:
-      - "8888:8888"
+      - "8501:8501"
     volumes:
       - ./datasus_cache:/app/datasus_cache
     restart: unless-stopped
-    environment:
-      - JUPYTER_PORT=8888

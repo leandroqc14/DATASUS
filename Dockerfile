@@ -24,9 +24,8 @@ RUN mkdir -p /app/datasus_cache
 # Copy application files (local files like .venv and data cache are ignored via .gitignore)
 COPY . /app/
 
-# Expose Jupyter port
-EXPOSE 8888
+# Expose Streamlit port
+EXPOSE 8501
 
-# Start JupyterLab allowing external access and disabling root warnings
-# Note: Token is set to empty for ease of use. If exposed publicly, protect it via firewall or reverse proxy.
-CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--NotebookApp.token=''"]
+# Start Streamlit app
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
