@@ -1,5 +1,5 @@
 # Use a lightweight official Python image
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # Avoid writing .pyc files and enable unbuffered logging
 ENV PYTHONDONTWRITEBYTECODE=1
