@@ -112,6 +112,12 @@ metodo_busca = st.sidebar.radio(
 # Lists for manual filters
 uf_lista = ['SP', 'RJ', 'MG', 'RS', 'PR', 'SC', 'BA', 'PE', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'PA', 'PB', 'PI', 'RN', 'RO', 'RR', 'SE', 'TO', 'AC', 'AL', 'AP', 'AM']
 uf_lista.sort()
+uf_lista.insert(0, 'BR') # Add BR for nationwide search
+
+def formatar_uf(uf_code):
+    if uf_code == 'BR':
+        return "BR (Brasil - Todos os Estados)"
+    return uf_code
 
 sistemas_lista = {
     "SINASC (Nascimentos)": ("sinasc", "DN"),
@@ -134,7 +140,12 @@ if metodo_busca == "🎛️ Filtros Manuais (Formulário)":
     sistema_label = st.sidebar.selectbox("Sistema de Saúde:", list(sistemas_lista.keys()))
     sistema_selecionado, sigla_selecionada = sistemas_lista[sistema_label]
     
-    uf_selecionada = st.sidebar.selectbox("Unidade Federativa (UF):", uf_lista, index=uf_lista.index('SP'))
+    uf_selecionada = st.sidebar.selectbox(
+        "Unidade Federativa (UF):",
+        uf_lista,
+        format_func=formatar_uf,
+        index=uf_lista.index('SP')
+    )
     
     # Year Range selection using a slider
     ano_range = st.sidebar.slider("Período (Anos):", 1996, 2025, (2021, 2022))
@@ -189,24 +200,27 @@ if metodo_busca == "💡 Linguagem Natural (Recomendado)":
     
     # Extract UF
     uf_detectada = 'SP'
-    for uf_item in uf_lista:
-        if uf_item.lower() in pergunta_clean or f" {uf_item.lower()}" in pergunta_clean:
-            uf_detectada = uf_item
-            break
-    # Check states by full name
-    estados_nomes = {
-        'acre': 'AC', 'alagoas': 'AL', 'amapá': 'AP', 'amazonas': 'AM', 'bahia': 'BA',
-        'ceará': 'CE', 'distrito federal': 'DF', 'espírito santo': 'ES', 'goiás': 'GO',
-        'maranhão': 'MA', 'mato grosso': 'MT', 'mato grosso do sul': 'MS', 'minas gerais': 'MG',
-        'pará': 'PA', 'paraíba': 'PB', 'paraná': 'PR', 'pernambuco': 'PE', 'piauí': 'PI',
-        'rio de janeiro': 'RJ', 'rio grande do norte': 'RN', 'rio grande do sul': 'RS',
-        'rondônia': 'RO', 'roraima': 'RR', 'santa catarina': 'SC', 'são paulo': 'SP',
-        'sergipe': 'SE', 'tocantins': 'TO'
-    }
-    for nome, sigla in estados_nomes.items():
-        if nome in pergunta_clean:
-            uf_detectada = sigla
-            break
+    if 'brasil' in pergunta_clean or ' nacional' in pergunta_clean or ' br' in pergunta_clean or 'todo o brasil' in pergunta_clean:
+        uf_detectada = 'BR'
+    else:
+        for uf_item in uf_lista:
+            if uf_item != 'BR' and (uf_item.lower() in pergunta_clean or f" {uf_item.lower()}" in pergunta_clean):
+                uf_detectada = uf_item
+                break
+        # Check states by full name
+        estados_nomes = {
+            'acre': 'AC', 'alagoas': 'AL', 'amapá': 'AP', 'amazonas': 'AM', 'bahia': 'BA',
+            'ceará': 'CE', 'distrito federal': 'DF', 'espírito santo': 'ES', 'goiás': 'GO',
+            'maranhão': 'MA', 'mato grosso': 'MT', 'mato grosso do sul': 'MS', 'minas gerais': 'MG',
+            'pará': 'PA', 'paraíba': 'PB', 'paraná': 'PR', 'pernambuco': 'PE', 'piauí': 'PI',
+            'rio de janeiro': 'RJ', 'rio grande do norte': 'RN', 'rio grande do sul': 'RS',
+            'rondônia': 'RO', 'roraima': 'RR', 'santa catarina': 'SC', 'são paulo': 'SP',
+            'sergipe': 'SE', 'tocantins': 'TO'
+        }
+        for nome, sigla in estados_nomes.items():
+            if nome in pergunta_clean:
+                uf_detectada = sigla
+                break
             
     # Extract Year Range
     ano_in_det = 2022

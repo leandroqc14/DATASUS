@@ -227,26 +227,41 @@ def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
 def baixar_periodo_datasus(sistema, sigla_arquivo, uf, ano_inicio, ano_fim, mes=None):
     """
     Downloads and concatenates DATASUS data for a range of years [ano_inicio, ano_fim].
+    Supports 'BR' to download and concatenate all 27 Brazilian states.
     """
     dfs = []
     anos_range = range(int(ano_inicio), int(ano_fim) + 1)
     
+    ufs_para_baixar = [uf.upper()]
+    if uf.upper() == 'BR':
+        ufs_para_baixar = [
+            'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 
+            'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 
+            'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+        ]
+        
     for ano in anos_range:
-        try:
-            print(f"\n--- Processando Ano: {ano} ---")
-            df_ano = baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes)
-            if df_ano is not None and not df_ano.empty:
-                # Add a year column to identify the record year
-                df_ano['ANO_DATA'] = ano
-                dfs.append(df_ano)
-        except Exception as e:
-            print(f"[Aviso] Erro ao baixar dados do ano {ano}: {e}. Pulando este ano.")
+        for estado in ufs_para_baixar:
+            try:
+                if len(ufs_para_baixar) > 1:
+                    print(f"\n--- Processando Estado: {estado} | Ano: {ano} ---")
+                else:
+                    print(f"\n--- Processando Ano: {ano} ---")
+                df_ano = baixar_arquivo_datasus(sistema, sigla_arquivo, estado, ano, mes)
+                if df_ano is not None and not df_ano.empty:
+                    # Add a year column to identify the record year
+                    df_ano['ANO_DATA'] = ano
+                    # Add a state column
+                    df_ano['UF'] = estado
+                    dfs.append(df_ano)
+            except Exception as e:
+                print(f"[Aviso] Erro ao baixar dados de {estado} no ano {ano}: {e}. Pulando...")
             
     if not dfs:
-        raise RuntimeError(f"Nenhum dado pôde ser baixado para o período {ano_inicio} a {ano_fim} no estado {uf}.")
+        raise RuntimeError(f"Nenhum dado pôde ser baixado para o período {ano_inicio} a {ano_fim} na localidade {uf}.")
         
     # Concatenate all datasets
-    print("\n[Pandas] Concatenando os dados de múltiplos anos...")
+    print("\n[Pandas] Concatenando os dados...")
     df_final = pd.concat(dfs, ignore_index=True)
     
     # Decodificar dados e rótulos
@@ -436,7 +451,8 @@ def buscar_dados(pergunta):
         'pará': 'PA', 'paraíba': 'PB', 'paraná': 'PR', 'pernambuco': 'PE', 'piauí': 'PI',
         'rio de janeiro': 'RJ', 'rio grande do norte': 'RN', 'rio grande do sul': 'RS',
         'rondônia': 'RO', 'roraima': 'RR', 'santa catarina': 'SC', 'são paulo': 'SP',
-        'sergipe': 'SE', 'tocantins': 'TO'
+        'sergipe': 'SE', 'tocantins': 'TO',
+        'brasil': 'BR', 'todo o brasil': 'BR', 'nacional': 'BR'
     }
     
     uf = None
@@ -446,7 +462,7 @@ def buscar_dados(pergunta):
             break
             
     if not uf:
-        match_uf = re.search(r'\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b', pergunta.upper())
+        match_uf = re.search(r'\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO|BR)\b', pergunta.upper())
         if match_uf:
             uf = match_uf.group(1)
             
