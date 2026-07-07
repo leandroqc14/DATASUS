@@ -26,15 +26,16 @@ def carregar_municipios_dict():
             with open(caminho_json, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"⚠️ Erro ao ler cache de municípios: {e}. Recriando...")
+            print(f"[Aviso] Erro ao ler cache de municípios: {e}. Recriando...")
             
     # If not in cache, download from IBGE API
     url = "https://servicodados.ibge.gov.br/api/v1/localidades/municipios"
-    print("🌐 Downloading municipality list from IBGE API...")
+    print("[IBGE] Baixando lista de municipios da API do IBGE...")
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode('utf-8'))
+        import requests
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        res.raise_for_status()
+        data = res.json()
             
         mapping = {}
         for item in data:
@@ -58,10 +59,10 @@ def carregar_municipios_dict():
         with open(caminho_json, 'w', encoding='utf-8') as f:
             json.dump(mapping, f, ensure_ascii=False, indent=1)
             
-        print(f"✅ Cached {len(mapping)} municipalities locally.")
+        print(f"[IBGE] Sucesso ao cachear {len(mapping)} municipios localmente.")
         return mapping
     except Exception as e:
-        print(f"⚠️ Falha ao baixar lista de municípios do IBGE: {e}")
+        print(f"[Aviso] Falha ao baixar lista de municipios do IBGE: {e}")
         return {}
 
 def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
@@ -95,7 +96,7 @@ def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
     
     # 1. Check if already in cache
     if os.path.exists(caminho_parquet):
-        print(f"🔄 Loading from cache: {nome_parquet}")
+        print(f"[Cache] Carregando do cache: {nome_parquet}")
         return pd.read_parquet(caminho_parquet)
     
     # FTP directories mapping
@@ -109,11 +110,11 @@ def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
     
     pasta_ftp = caminhos_ftp.get(sistema.lower())
     if not pasta_ftp:
-        raise ValueError(f"Sistema '{sistema}' não suportado. Escolha entre: {list(caminhos_ftp.keys())}")
+        raise ValueError(f"Sistema '{sistema}' nao suportado. Escolha entre: {list(caminhos_ftp.keys())}")
         
     arquivo_alvo = nome_dbc.upper()
     
-    print(f"🌐 Connecting to DATASUS FTP (ftp.datasus.gov.br)...")
+    print(f"[FTP] Conectando ao FTP do DATASUS (ftp.datasus.gov.br)...")
     temp_dir = tempfile.gettempdir()
     caminho_local_dbc = os.path.join(temp_dir, nome_dbc)
     caminho_local_dbf = os.path.join(temp_dir, nome_dbf)
@@ -140,9 +141,9 @@ def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
                     
         if not arquivo_encontrado:
             ftp.quit()
-            raise FileNotFoundError(f"Arquivo {nome_dbc} não encontrado no FTP na pasta: {pasta_ftp}")
+            raise FileNotFoundError(f"Arquivo {nome_dbc} nao encontrado no FTP na pasta: {pasta_ftp}")
             
-        print(f"📥 Downloading {arquivo_encontrado}...")
+        print(f"[FTP] Baixando {arquivo_encontrado}...")
         tamanho_total = ftp.size(arquivo_encontrado)
         
         with open(caminho_local_dbc, 'wb') as f_out, tqdm(
@@ -156,18 +157,18 @@ def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
         ftp.quit()
         
         # 2. Decompress using pure-python library
-        print(f"📦 Decompressing .dbc file...")
+        print(f"[Conversao] Descompactando arquivo .dbc...")
         decomp = DBCDecompress()
         decomp.decompressFile(caminho_local_dbc, caminho_local_dbf)
         
         # 3. Read DBF using dbfread
-        print(f"📊 Loading DBF file into Pandas...")
+        print(f"[Pandas] Carregando arquivo DBF...")
         dbf = DBF(caminho_local_dbf, encoding='iso-8859-1')
         df = pd.DataFrame(iter(dbf))
         
         # Save to parquet cache
         df.to_parquet(caminho_parquet, index=False)
-        print(f"✅ Process complete! Cached at {nome_parquet} ({len(df):,} rows)")
+        print(f"[Sucesso] Processo concluido! Salvo no cache: {nome_parquet} ({len(df):,} linhas)")
         
         # Cleanup temp files
         if os.path.exists(caminho_local_dbc): os.remove(caminho_local_dbc)
@@ -196,13 +197,13 @@ def baixar_periodo_datasus(sistema, sigla_arquivo, uf, ano_inicio, ano_fim, mes=
                 df_ano['ANO_DATA'] = ano
                 dfs.append(df_ano)
         except Exception as e:
-            print(f"⚠️ Erro ao baixar dados do ano {ano}: {e}. Pulando este ano.")
+            print(f"[Aviso] Erro ao baixar dados do ano {ano}: {e}. Pulando este ano.")
             
     if not dfs:
         raise RuntimeError(f"Nenhum dado pôde ser baixado para o período {ano_inicio} a {ano_fim} no estado {uf}.")
         
     # Concatenate all datasets
-    print("\n🔄 Concatenando os dados de múltiplos anos...")
+    print("\n[Pandas] Concatenando os dados de múltiplos anos...")
     df_final = pd.concat(dfs, ignore_index=True)
     
     # Decodificar dados e rótulos
@@ -267,7 +268,7 @@ def decodificar_dados(df, sistema):
             break
             
     if mun_col:
-        print(f"📍 Decodificando códigos municipais da coluna: {mun_col}")
+        print(f"[Sucesso] Decodificando codigos municipais da coluna: {mun_col}")
         # Clean codes and map them to names
         df['Município'] = df[mun_col].apply(limpar_codigo_municipio).map(mun_dict).fillna(df[mun_col].astype(str))
     
@@ -384,7 +385,7 @@ def buscar_dados(pergunta):
             uf = match_uf.group(1)
             
     if not uf:
-        print("⚠️ Estado não detectado. Usando 'SP' como padrão.")
+        print("[Aviso] Estado nao detectado. Usando 'SP' como padrao.")
         uf = 'SP'
         
     # 2. Year Range Parsing (e.g. "de 2020 a 2022" or "2019-2021" or "2020 e 2021")
@@ -414,7 +415,7 @@ def buscar_dados(pergunta):
                 ano_fim = ano_val
                 
     if not ano_inicio:
-        print("⚠️ Ano não detectado. Usando 2022 como padrão.")
+        print("[Aviso] Ano nao detectado. Usando 2022 como padrao.")
         ano_inicio = 2022
         ano_fim = 2022
         
@@ -462,9 +463,9 @@ def buscar_dados(pergunta):
             break
             
     if not sistema:
-        print("⚠️ Sistema de saúde não reconhecido. Usando 'SIM' (mortalidade) como padrão.")
+        print("[Aviso] Sistema de saude nao reconhecido. Usando 'SIM' (mortalidade) como padrao.")
         sistema = 'sim'
         sigla_arquivo = 'DO'
         
-    print(f"🔍 NLP parsed: Sistema={sistema.upper()} ({sigla_arquivo}), Estado={uf}, Período={ano_inicio} a {ano_fim}, Mês={mes}")
+    print(f"[NLP] Parser: Sistema={sistema.upper()} ({sigla_arquivo}), Estado={uf}, Periodo={ano_inicio} a {ano_fim}, Mes={mes}")
     return baixar_periodo_datasus(sistema, sigla_arquivo, uf, ano_inicio, ano_fim, mes)
