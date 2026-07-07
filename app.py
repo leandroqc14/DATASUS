@@ -388,12 +388,13 @@ if df_raw is not None:
         </div>
         """, unsafe_allow_html=True)
         
-    # Tabs for navigation (Preview, Visualization, Cross-tabulation, CID-10 Dictionary, Export)
-    tab_dados, tab_graficos, tab_cruzamento, tab_cid10, tab_exportar = st.tabs([
+    # Tabs for navigation (Preview, Visualization, Cross-tabulation, CID-10 Dictionary, Gemini Chat, Export)
+    tab_dados, tab_graficos, tab_cruzamento, tab_cid10, tab_chat, tab_exportar = st.tabs([
         "📊 Tabela de Dados", 
         "📈 Análises Gráficas", 
         "🔗 Cruzamento de Variáveis (Tabela Cruzada)",
         "📖 Dicionário CID-10",
+        "💬 Chat IA (Gemini)",
         "💾 Exportar Base"
     ])
     
@@ -654,6 +655,138 @@ if df_raw is not None:
                     """)
         else:
             st.warning("⚠️ Não foi possível carregar a base de dados da CID-10.")
+
+    with tab_chat:
+        st.markdown("#### 💬 Chat Inteligente IA (Gemini)")
+        st.write("Faça perguntas sobre os dados carregados em linguagem natural. A IA escreverá o código de consulta apropriado e trará as respostas estruturadas.")
+        
+        # 1. API Key Setup
+        gemini_api_key = st.text_input(
+            "Chave API do Gemini (obtenha em aistudio.google.com):",
+            value=os.environ.get("GEMINI_API_KEY", ""),
+            type="password",
+            help="Sua chave não é salva no servidor, ela permanece segura apenas em memória durante a sessão."
+        )
+        
+        if not gemini_api_key:
+            st.info("🔑 Por favor, insira sua **Chave API do Gemini** no campo acima para começar a conversar com os dados.")
+        else:
+            # Configure API
+            import google.generativeai as genai
+            genai.configure(api_key=gemini_api_key)
+            
+            # Initialize chat history in session state
+            if 'chat_messages' not in st.session_state:
+                st.session_state['chat_messages'] = []
+                
+            # Display chat messages
+            for msg in st.session_state['chat_messages']:
+                with st.chat_message(msg['role']):
+                    st.markdown(msg['content'])
+                    if 'code' in msg and msg['code']:
+                        with st.expander("🛠️ Código Executado"):
+                            st.code(msg['code'], language="python")
+                            st.code(f"Resultado: {msg['result']}", language="text")
+                            
+            # Accept user input
+            if prompt_user := st.chat_input("Pergunte algo sobre os dados (ex: 'Qual a cidade com mais internações?' ou 'Qual a média de idade?')"):
+                # Display user message
+                with st.chat_message("user"):
+                    st.markdown(prompt_user)
+                st.session_state['chat_messages'].append({'role': 'user', 'content': prompt_user})
+                
+                # Generate response
+                with st.chat_message("assistant"):
+                    status_placeholder = st.empty()
+                    status_placeholder.markdown("🤔 *Analisando estrutura dos dados e preparando query...*")
+                    
+                    try:
+                        # Prepare data context
+                        cols_info = list(df_filtered.columns)
+                        dtypes_info = {k: str(v) for k, v in df_filtered.dtypes.items()}
+                        sample_info = df_filtered.head(3).to_dict(orient='records')
+                        
+                        system_prompt_code = f"""
+Você é um assistente especialista em análise de dados do DATASUS.
+Você tem acesso a um DataFrame do Pandas chamado `df` que contém os dados atualmente selecionados pelo usuário.
+O DataFrame possui {len(df_filtered)} linhas e as seguintes colunas:
+Colunas: {cols_info}
+Tipos de dados: {dtypes_info}
+Amostra (3 linhas): {sample_info}
+
+Escreva um código Python seguro usando Pandas para responder à pergunta do usuário: '{prompt_user}'.
+O seu código DEVE obrigatoriamente definir uma variável chamada `resposta` contendo o resultado da análise (ex: texto formatado, DataFrame pequeno, número, tabela Markdown, etc.).
+REGRAS:
+1. Retorne APENAS o código Python puro dentro de um bloco de código markdown (iniciando com ```python e terminando com ```).
+2. Não escreva nenhuma introdução ou explicação fora do bloco de código.
+3. Não use comandos perigosos. Use apenas agregações, contagens, ordenações e filtros do Pandas.
+4. Trate valores nulos ou vazios de forma amigável no código.
+"""
+                        
+                        # Generate code with Gemini
+                        model = genai.GenerativeModel("gemini-2.5-flash")
+                        res_code = model.generate_content(system_prompt_code)
+                        code_text = res_code.text
+                        
+                        # Extract python code block
+                        code_match = re.search(r'```python\s*(.*?)\s*```', code_text, re.DOTALL)
+                        if code_match:
+                            code_to_run = code_match.group(1)
+                        else:
+                            # Fallback if no block format
+                            code_to_run = code_text.strip()
+                            if code_to_run.startswith("python"):
+                                code_to_run = code_to_run[6:]
+                                
+                        status_placeholder.markdown("⚙️ *Executando query nos dados locais...*")
+                        
+                        # Execute code in local namespace
+                        local_vars = {'df': df_filtered, 'pd': pd}
+                        try:
+                            exec(code_to_run, {}, local_vars)
+                            res_exec = local_vars.get('resposta', 'O código foi executado com sucesso, mas a variável "resposta" não foi definida.')
+                        except Exception as exec_err:
+                            res_exec = f"Erro ao executar o código gerado: {exec_err}"
+                            
+                        status_placeholder.markdown("✍️ *Interpretando resultados e formulando resposta...*")
+                        
+                        # Final response prompt
+                        final_prompt = f"""
+O usuário perguntou sobre a base do DATASUS: '{prompt_user}'
+Para responder, nós rodamos o seguinte código Pandas no DataFrame `df`:
+```python
+{code_to_run}
+```
+O resultado obtido foi:
+{res_exec}
+
+Com base nisso, formule a resposta final para o usuário de forma amigável, clara e concisa em português do Brasil.
+Escreva a resposta em formato Markdown. Se houver tabelas ou listas, formate-as de forma bonita.
+Se o código falhou ou gerou erro, explique isso ao usuário de forma amigável e sugira outra forma de perguntar.
+"""
+                        
+                        res_final = model.generate_content(final_prompt)
+                        final_text = res_final.text
+                        
+                        # Display response
+                        status_placeholder.markdown(final_text)
+                        
+                        with st.expander("🛠️ Código Executado"):
+                            st.code(code_to_run, language="python")
+                            st.code(f"Resultado bruto: {res_exec}", language="text")
+                            
+                        # Save message
+                        st.session_state['chat_messages'].append({
+                            'role': 'assistant',
+                            'content': final_text,
+                            'code': code_to_run,
+                            'result': str(res_exec)
+                        })
+                        
+                    except Exception as api_err:
+                        err_msg = f"❌ Ocorreu um erro ao conectar com o Gemini: {api_err}"
+                        status_placeholder.markdown(err_msg)
+                        st.session_state['chat_messages'].append({'role': 'assistant', 'content': err_msg})
 
     with tab_exportar:
         st.markdown("#### 💾 Exportar e Salvar Base Tratada")
