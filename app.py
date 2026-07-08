@@ -708,8 +708,8 @@ if df_raw is not None:
             st.info("🔑 Por favor, insira sua **Chave API do Gemini** no campo acima para começar a conversar com os dados.")
         else:
             # Configure API
-            import google.generativeai as genai
-            genai.configure(api_key=gemini_api_key)
+            from google import genai
+            client = genai.Client(api_key=gemini_api_key)
             
             # Initialize chat history in session state
             if 'chat_messages' not in st.session_state:
@@ -760,8 +760,10 @@ REGRAS:
 """
                         
                         # Generate code with Gemini
-                        model = genai.GenerativeModel("gemini-2.5-flash")
-                        res_code = model.generate_content(system_prompt_code)
+                        res_code = client.models.generate_content(
+                            model="gemini-2.5-flash",
+                            contents=system_prompt_code
+                        )
                         code_text = res_code.text
                         
                         # Extract python code block
@@ -801,7 +803,10 @@ Escreva a resposta em formato Markdown. Se houver tabelas ou listas, formate-as 
 Se o código falhou ou gerou erro, explique isso ao usuário de forma amigável e sugira outra forma de perguntar.
 """
                         
-                        res_final = model.generate_content(final_prompt)
+                        res_final = client.models.generate_content(
+                            model="gemini-2.5-flash",
+                            contents=final_prompt
+                        )
                         final_text = res_final.text
                         
                         # Display response

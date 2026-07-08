@@ -17,7 +17,7 @@ def main():
     sigla = sistemas_validos[sistema]
     
     # 2. Select UF
-    uf = input("2. Digite a UF (Estado, ex: AC, SP, RJ): ").strip().upper()
+    uf = input("2. Digite a UF (Estado, ex: AC, SP, RJ ou BR para Brasil todo): ").strip().upper()
     if len(uf) != 2:
         print("❌ UF inválida. Deve conter exatamente 2 letras.")
         return
