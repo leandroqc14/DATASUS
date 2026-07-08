@@ -387,7 +387,7 @@ if df_raw is not None:
             cid_col = c
             break
             
-    col_filt_1, col_filt_2, col_filt_3 = st.columns(3)
+    col_filt_1, col_filt_2, col_filt_3, col_filt_4 = st.columns(4)
     df_filtered = df_raw.copy()
     
     # 1. Age Filtering logic
@@ -441,6 +441,29 @@ if df_raw is not None:
                 df_filtered = filtrar_cids(df_filtered, cid_col, cid_input)
         else:
             st.info("ℹ️ Nenhuma coluna de CID-10 encontrada para filtragem de diagnóstico/causa.")
+            
+    # 4. Month Filtering logic
+    with col_filt_4:
+        if 'MES_DATA' in df_filtered.columns:
+            meses_nomes = {
+                1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
+                5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
+                9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+            }
+            meses_presentes = sorted(df_filtered['MES_DATA'].dropna().unique().tolist())
+            meses_nomes_opcoes = [f"{meses_nomes[int(m)]} ({int(m):02d})" for m in meses_presentes]
+            
+            meses_selecionados_labels = st.multiselect(
+                "Filtrar por Mês:",
+                options=meses_nomes_opcoes,
+                default=[],
+                help="Selecione um ou mais meses para filtrar localmente. Deixe vazio para analisar todos."
+            )
+            if meses_selecionados_labels:
+                meses_selecionados_ints = [int(lbl.split('(')[1].split(')')[0]) for lbl in meses_selecionados_labels]
+                df_filtered = df_filtered[df_filtered['MES_DATA'].isin(meses_selecionados_ints)]
+        else:
+            st.info("ℹ️ Filtragem mensal indisponível (Base Anual).")
             
     # ------------------ MAIN METRICS ------------------
     st.markdown("---")
