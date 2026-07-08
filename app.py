@@ -810,10 +810,10 @@ Ano de referência atual: 2026.
                         
                     if is_load_request:
                         # ---------------- CONVERSATIONAL DATA LOAD MODE ----------------
-                        sistema = intent_params.get('sistema', 'sim')
-                        uf = intent_params.get('uf', 'SP').upper()
-                        ano_inicio = intent_params.get('ano_inicio', 2022)
-                        ano_fim = intent_params.get('ano_fim', 2022)
+                        sistema = (intent_params.get('sistema') or 'sim').lower()
+                        uf = (intent_params.get('uf') or 'SP').upper()
+                        ano_inicio = intent_params.get('ano_inicio') or 2022
+                        ano_fim = intent_params.get('ano_fim') or 2022
                         mes = intent_params.get('mes')
                         
                         status_placeholder.markdown(f"📥 *Intenção de busca detectada! Baixando dados para: {sistema.upper()} | UF: {uf} | Período: {ano_inicio}-{ano_fim}...*")
