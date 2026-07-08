@@ -140,7 +140,9 @@ def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
     # 1. Check if already in cache
     if os.path.exists(caminho_parquet):
         print(f"[Cache] Carregando do cache: {nome_parquet}")
-        return pd.read_parquet(caminho_parquet)
+        df = pd.read_parquet(caminho_parquet)
+        df.attrs['from_cache'] = True
+        return df
     
     # FTP directories mapping
     caminhos_ftp = {
@@ -211,6 +213,7 @@ def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
         
         # Save to parquet cache
         df.to_parquet(caminho_parquet, index=False)
+        df.attrs['from_cache'] = False
         print(f"[Sucesso] Processo concluido! Salvo no cache: {nome_parquet} ({len(df):,} linhas)")
         
         # Cleanup temp files
@@ -240,6 +243,9 @@ def baixar_periodo_datasus(sistema, sigla_arquivo, uf, ano_inicio, ano_fim, mes=
             'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
         ]
         
+    cache_count = 0
+    download_count = 0
+    
     for ano in anos_range:
         for estado in ufs_para_baixar:
             try:
@@ -249,6 +255,11 @@ def baixar_periodo_datasus(sistema, sigla_arquivo, uf, ano_inicio, ano_fim, mes=
                     print(f"\n--- Processando Ano: {ano} ---")
                 df_ano = baixar_arquivo_datasus(sistema, sigla_arquivo, estado, ano, mes)
                 if df_ano is not None and not df_ano.empty:
+                    # Track cache vs download
+                    if df_ano.attrs.get('from_cache', False):
+                        cache_count += 1
+                    else:
+                        download_count += 1
                     # Add a year column to identify the record year
                     df_ano['ANO_DATA'] = ano
                     # Add a state column
@@ -263,6 +274,10 @@ def baixar_periodo_datasus(sistema, sigla_arquivo, uf, ano_inicio, ano_fim, mes=
     # Concatenate all datasets
     print("\n[Pandas] Concatenando os dados...")
     df_final = pd.concat(dfs, ignore_index=True)
+    
+    # Store cache counts
+    df_final.attrs['cache_count'] = cache_count
+    df_final.attrs['download_count'] = download_count
     
     # Decodificar dados e rótulos
     df_final = decodificar_dados(df_final, sistema)

@@ -273,7 +273,7 @@ if metodo_busca == "💡 Linguagem Natural (Recomendado)":
         btn_buscar = st.button("🚀 Buscar no DATASUS", use_container_width=True)
         
     if btn_buscar:
-        with st.spinner("Conectando ao FTP do DATASUS e baixando o período selecionado..."):
+        with st.spinner("Buscando dados (lendo do cache local ou conectando ao FTP do DATASUS)..."):
             try:
                 df_raw = buscar_dados(pergunta_usuario)
                 st.session_state['df_raw'] = df_raw
@@ -292,7 +292,7 @@ else:
         btn_buscar_manual = st.button("🚀 Buscar no DATASUS", use_container_width=True)
         
     if btn_buscar_manual:
-        with st.spinner("Baixando e compilando os dados do período..."):
+        with st.spinner("Buscando dados (lendo do cache local ou baixando do FTP)..."):
             try:
                 df_raw = baixar_periodo_datasus(sistema_selecionado, sigla_selecionada, uf_selecionada, ano_inicio_sel, ano_fim_sel, mes_selecionado)
                 st.session_state['df_raw'] = df_raw
@@ -318,7 +318,20 @@ if 'df_raw' in st.session_state:
 # Display results if dataset is loaded
 if df_raw is not None:
     st.markdown("---")
-    st.success(f"🎉 Dados originais carregados na memória! Total bruto: {len(df_raw):,} registros.")
+    
+    # Check cache vs download status
+    cache_count = df_raw.attrs.get('cache_count', 0)
+    download_count = df_raw.attrs.get('download_count', 0)
+    
+    if download_count == 0 and cache_count > 0:
+        st.success(f"⚡ **Dados carregados instantaneamente do cache local (Parquet)!** Total bruto: **{len(df_raw):,}** registros.")
+    elif download_count > 0 and cache_count == 0:
+        st.success(f"📥 **Dados baixados com sucesso do FTP do DATASUS e salvos no cache local!** Total bruto: **{len(df_raw):,}** registros.")
+    elif download_count > 0 and cache_count > 0:
+        st.success(f"🎉 **Dados carregados!** ({cache_count} arquivos lidos do cache local, {download_count} baixados do FTP). Total bruto: **{len(df_raw):,}** registros.")
+    else:
+        # Fallback if cache attrs are empty
+        st.success(f"🎉 **Dados originais carregados na memória!** Total bruto: **{len(df_raw):,}** registros.")
     
     # ------------------ DYNAMIC FILTERING INTERFACE ------------------
     st.markdown("### 🎛️ Painel de Filtros Acadêmicos (Idade, Município e CID-10)")
