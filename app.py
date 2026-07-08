@@ -24,6 +24,38 @@ def adicionar_rotulos(ax):
                 except:
                     pass
 
+def filtrar_cids(df, col, texto_busca):
+    """
+    Filtra um DataFrame por códigos CID-10 suportando:
+    - CIDs únicos (ex: M80 ou M80.0)
+    - Lista de CIDs (ex: M80, M81, M82)
+    - Intervalo de CIDs (ex: M80-M85 ou M80 a M85)
+    """
+    if not texto_busca:
+        return df
+        
+    # Remove pontos e padroniza para maiúsculo
+    texto_busca = texto_busca.upper().replace('.', '').strip()
+    
+    # Divide por vírgula ou ponto e vírgula
+    tokens = [t.strip() for t in re.split(r'[,;]+', texto_busca) if t.strip()]
+    
+    mask = pd.Series(False, index=df.index)
+    
+    for token in tokens:
+        # Verifica se é uma faixa de CIDs (ex: M80-M85 ou M80 A M85)
+        match_range = re.match(r'^([A-Z][0-9]{2,3})\s*[-A\s]+\s*([A-Z][0-9]{2,3})$', token)
+        if match_range:
+            start_cat, end_cat = match_range.groups()
+            length = len(start_cat)
+            codigos_col = df[col].astype(str).str.upper().str.strip().str.slice(0, length)
+            mask = mask | ((codigos_col >= start_cat) & (codigos_col <= end_cat))
+        else:
+            # Busca padrão por início do código (startswith)
+            mask = mask | df[col].astype(str).str.upper().str.strip().str.startswith(token)
+            
+    return df[mask]
+
 # Set page configuration with premium aesthetics
 st.set_page_config(
     page_title="Portal DATASUS - Assistente Científico",
@@ -403,11 +435,10 @@ if df_raw is not None:
             cid_input = st.text_input(
                 f"Filtrar por CID-10 ({cid_col}):",
                 value=cid_manual_input,
-                help="Digite o CID (Ex: M80.0 ou M80). O ponto será removido automaticamente para combinar com a base do DATASUS."
+                help="Digite códigos (Ex: M80), lista (Ex: M80, M81, M82) ou faixa de CIDs (Ex: M80-M85 ou M80 a M85)."
             )
             if cid_input:
-                cid_cleaned = cid_input.replace('.', '').strip().upper()
-                df_filtered = df_filtered[df_filtered[cid_col].astype(str).str.upper().str.startswith(cid_cleaned)]
+                df_filtered = filtrar_cids(df_filtered, cid_col, cid_input)
         else:
             st.info("ℹ️ Nenhuma coluna de CID-10 encontrada para filtragem de diagnóstico/causa.")
             
