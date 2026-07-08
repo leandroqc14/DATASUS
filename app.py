@@ -302,7 +302,7 @@ if metodo_busca == "💡 Linguagem Natural (Recomendado)":
     
     col_btn, _ = st.columns([1, 4])
     with col_btn:
-        btn_buscar = st.button("🚀 Buscar no DATASUS", use_container_width=True)
+        btn_buscar = st.button("🚀 Buscar no DATASUS", width="stretch")
         
     if btn_buscar:
         with st.spinner("Buscando dados (lendo do cache local ou conectando ao FTP do DATASUS)..."):
@@ -321,7 +321,7 @@ else:
     
     col_btn, _ = st.columns([1, 4])
     with col_btn:
-        btn_buscar_manual = st.button("🚀 Buscar no DATASUS", use_container_width=True)
+        btn_buscar_manual = st.button("🚀 Buscar no DATASUS", width="stretch")
         
     if btn_buscar_manual:
         with st.spinner("Buscando dados (lendo do cache local ou baixando do FTP)..."):
@@ -481,7 +481,7 @@ with tab_dados:
     if df_raw is not None:
         st.markdown("#### 🔍 Visualização dos Dados Filtrados")
         st.write("Ordene, pesquise ou inspecione a tabela de dados tratada com nomes legíveis abaixo:")
-        st.dataframe(df_filtered.head(200), use_container_width=True)
+        st.dataframe(df_filtered.head(200), width="stretch")
         st.caption("Exibindo as primeiras 200 linhas da tabela filtrada para desempenho rápido no navegador.")
     else:
         st.info("💡 Por favor, faça uma busca acima para carregar os dados do DATASUS e visualizar a tabela de dados!")
@@ -528,7 +528,7 @@ with tab_graficos:
                     x='Óbitos',
                     y=target_col,
                     color=target_col,
-                    use_container_width=True
+                    width="stretch"
                 )
                 
             with col_g2:
@@ -554,7 +554,7 @@ with tab_graficos:
                 x='Internações',
                 y=target_col,
                 color=target_col,
-                use_container_width=True
+                width="stretch"
             )
             
         # 2. General graphs by Municipality and Age
@@ -574,7 +574,7 @@ with tab_graficos:
                     x='Ocorrências',
                     y='Município',
                     color='Município',
-                    use_container_width=True
+                    width="stretch"
                 )
             else:
                 st.info("ℹ️ Sem dados de município para plotagem geográfica.")
@@ -618,7 +618,7 @@ with tab_graficos:
                         x='Casos',
                         y='Faixa Etária',
                         color='Faixa Etária',
-                        use_container_width=True
+                        width="stretch"
                     )
                 else:
                     st.warning("Sem dados numéricos de idade válidos para faixas etárias.")
@@ -649,14 +649,14 @@ with tab_cruzamento:
                 
             st.markdown("##### 1. Tabela Cruzada de Frequência Absoluta (Contagem de Casos)")
             crosstab_abs = pd.crosstab(df_filtered[var_linha], df_filtered[var_coluna], margins=True, margins_name="Total")
-            st.dataframe(crosstab_abs, use_container_width=True)
+            st.dataframe(crosstab_abs, width="stretch")
             
             st.markdown("##### 2. Tabela Cruzada de Proporção Relativa (Porcentagem por Linha)")
             st.write("Ideal para comparar proporções. Exibe a distribuição percentual do desfecho dentro de cada grupo comparativo.")
             crosstab_pct = pd.crosstab(df_filtered[var_linha], df_filtered[var_coluna], normalize='index') * 100
             # Format percentage display
             crosstab_pct_formatted = crosstab_pct.style.format("{:.2f}%")
-            st.dataframe(crosstab_pct_formatted, use_container_width=True)
+            st.dataframe(crosstab_pct_formatted, width="stretch")
             
             if not crosstab_pct.empty and crosstab_pct.shape[0] > 0 and crosstab_pct.shape[1] > 0:
                 st.markdown("##### 3. Gráfico de Barras Empilhadas de Proporção")
@@ -728,7 +728,7 @@ with tab_cid10:
                     ]
                     
                 st.markdown(f"Encontrados **{len(df_result)}** códigos correspondentes na CID-10:")
-                st.dataframe(df_result, use_container_width=True, hide_index=True)
+                st.dataframe(df_result, width="stretch", hide_index=True)
                 
                 # Display structural explanation specifically for M80 if search contains M80
                 if 'm80' in busca_clean:
@@ -999,7 +999,7 @@ with tab_exportar:
             data=csv_buffer,
             file_name=nome_arquivo_export,
             mime="text/csv",
-            use_container_width=True
+            width="stretch"
         )
         st.success(f"Arquivo de exportação gerado: `{nome_arquivo_export}`")
     else:
