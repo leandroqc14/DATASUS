@@ -720,6 +720,8 @@ if df_raw is not None:
         if not gemini_api_key:
             st.info("🔑 Por favor, insira sua **Chave API do Gemini** no campo acima para começar a conversar com os dados.")
         else:
+            # Save manually entered key to environment for global use
+            os.environ["GEMINI_API_KEY"] = gemini_api_key
             # Configure API
             from google import genai
             client = genai.Client(api_key=gemini_api_key)

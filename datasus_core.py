@@ -455,8 +455,75 @@ def buscar_dados(pergunta):
     """
     Parses a natural language question to extract UF, year range, month, and system,
     then triggers the download and returns the loaded, concatenated DataFrame.
+    Uses Gemini AI if GEMINI_API_KEY is available, falling back to regex.
     """
     pergunta_clean = pergunta.lower().strip()
+    
+    # Try using Gemini first if key is available in environment
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if api_key:
+        try:
+            from google import genai
+            from google.genai import types
+            import json
+            
+            client = genai.Client(api_key=api_key)
+            system_prompt = f"""
+Você é um interpretador de intenções de busca do DATASUS brasileiro.
+A partir da pergunta do usuário, extraia os parâmetros de busca corretos para download.
+
+Sistemas disponíveis:
+- 'sinasc': Nascimentos/partos (DN)
+- 'sim': Óbitos/mortalidade/mortes/falecimentos (DO)
+- 'sih': Internações hospitalares/AIH/doenças/diagnósticos/fraturas (RD)
+- 'sia': Produção ambulatorial/consultas (PA)
+- 'cnes': Estabelecimentos/leitos de saúde (LT)
+
+Regra de Doenças/CIDs:
+Se a pergunta citar CIDs (ex: M80, M80.0, C00), doenças, fraturas, dores, patologias ou infecções, decida se faz sentido buscar internações/hospitalizações (sih) ou óbitos/mortes (sim) com base no contexto. Se não especificado na pergunta, decida pelo mais provável para dados epidemiológicos ativos (ex: fraturas/osteoporose costuma ser hospitalizações 'sih').
+
+Regra de Cidades/UFs:
+Mapeie o local mencionado para a sigla do estado em maiúsculo (ex: "Salvador" -> "BA", "Rio" -> "RJ"). Se for todo o Brasil/nacional/geral, use "BR". Padrão: "SP" se não especificado.
+
+Retorne APENAS um objeto JSON com as chaves:
+- "sistema": string (um dos 5 sistemas acima)
+- "uf": string (sigla de 2 letras da UF em maiúsculo, ou "BR". Padrão: "SP")
+- "ano_inicio": número inteiro (ex: 2021)
+- "ano_fim": número inteiro (ex: 2021)
+- "mes": número inteiro (1 a 12) ou null (padrão: null)
+
+Pergunta do usuário: "{pergunta}"
+Ano de referência atual (para termos como "ano passado"): 2026.
+"""
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=system_prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                ),
+            )
+            
+            params = json.loads(response.text.strip())
+            sistema = params.get('sistema', 'sim')
+            uf = params.get('uf', 'SP').upper()
+            ano_inicio = params.get('ano_inicio', 2022)
+            ano_fim = params.get('ano_fim', 2022)
+            mes = params.get('mes')
+            
+            sistemas_siglas = {
+                'sinasc': 'DN',
+                'sim': 'DO',
+                'sih': 'RD',
+                'sia': 'PA',
+                'cnes': 'LT'
+            }
+            sigla_arquivo = sistemas_siglas.get(sistema, 'DO')
+            
+            print(f"[AI Parser] Detectado por IA: Sistema={sistema.upper()} | UF={uf} | Período={ano_inicio}-{ano_fim} | Mês={mes}")
+            return baixar_periodo_datasus(sistema, sigla_arquivo, uf, ano_inicio, ano_fim, mes)
+            
+        except Exception as e:
+            print(f"[AI Parser Warning] Falha ao usar IA para interpretar: {e}. Usando parser regex como fallback...")
     
     # 1. State Mapping (UF)
     estados_map = {
