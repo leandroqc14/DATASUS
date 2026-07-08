@@ -761,7 +761,90 @@ with tab_chat:
                 with st.chat_message("assistant"):
                     status_placeholder = st.empty()
                     
-                    if df_raw is not None:
+                    # 1. Classify if the user wants to download/load a new dataset
+                    status_placeholder.markdown("🔍 *Analisando sua intenção...*")
+                    is_load_request = False
+                    intent_params = {}
+                    
+                    try:
+                        from google.genai import types
+                        import json
+                        
+                        system_prompt_intent = f"""
+Você é um classificador de intenções para o assistente DATASUS.
+Determine se o usuário está pedindo para baixar, pesquisar ou carregar uma base de dados nova (ex: "busque...", "baixe...", "pesquise...", "quero ver dados de...", "analise os nascimentos de...", "carregue óbitos de...").
+
+Sistemas disponíveis:
+- 'sinasc': Nascimentos/partos (DN)
+- 'sim': Óbitos/mortalidade/mortes/falecimentos (DO)
+- 'sih': Internações hospitalares/AIH (RD)
+- 'sia': Produção ambulatorial/consultas (PA)
+- 'cnes': Estabelecimentos/leitos de saúde (LT)
+
+Regra de Cidades/UFs:
+Mapeie o local mencionado para a sigla do estado em maiúsculo (ex: "Salvador" -> "BA"). Se for todo o Brasil/nacional, use "BR". Padrão: "SP" se não especificado.
+
+Retorne APENAS um objeto JSON com as chaves:
+- "is_load_request": boolean (true se o usuário estiver pedindo para carregar/baixar/pesquisar um novo período/estado/sistema. false se for apenas uma pergunta analítica sobre a base que já está carregada, ou uma pergunta teórica geral).
+- "sistema": string ou null (um dos 5 sistemas acima)
+- "uf": string ou null (sigla da UF ou "BR")
+- "ano_inicio": número inteiro ou null
+- "ano_fim": número inteiro ou null
+- "mes": número inteiro (1 a 12) ou null
+
+Pergunta do usuário: "{prompt_user}"
+Ano de referência atual: 2026.
+"""
+                        res_intent = client.models.generate_content(
+                            model="gemini-2.5-flash",
+                            contents=system_prompt_intent,
+                            config=types.GenerateContentConfig(
+                                response_mime_type="application/json",
+                            )
+                        )
+                        intent_params = json.loads(res_intent.text.strip())
+                        is_load_request = intent_params.get("is_load_request", False)
+                    except Exception as intent_err:
+                        print(f"[Chat Intent Error] {intent_err}")
+                        is_load_request = False
+                        
+                    if is_load_request:
+                        # ---------------- CONVERSATIONAL DATA LOAD MODE ----------------
+                        sistema = intent_params.get('sistema', 'sim')
+                        uf = intent_params.get('uf', 'SP').upper()
+                        ano_inicio = intent_params.get('ano_inicio', 2022)
+                        ano_fim = intent_params.get('ano_fim', 2022)
+                        mes = intent_params.get('mes')
+                        
+                        status_placeholder.markdown(f"📥 *Intenção de busca detectada! Baixando dados para: {sistema.upper()} | UF: {uf} | Período: {ano_inicio}-{ano_fim}...*")
+                        try:
+                            sistemas_siglas = {
+                                'sinasc': 'DN', 'sim': 'DO', 'sih': 'RD', 'sia': 'PA', 'cnes': 'LT'
+                            }
+                            sigla_arquivo = sistemas_siglas.get(sistema, 'DO')
+                            
+                            df_raw = baixar_periodo_datasus(sistema, sigla_arquivo, uf, ano_inicio, ano_fim, mes)
+                            
+                            st.session_state['df_raw'] = df_raw
+                            st.session_state['search_info'] = (sistema, uf, ano_inicio, ano_fim, mes)
+                            st.session_state['last_query'] = prompt_user
+                            st.session_state['last_query_manual'] = (sistema, uf, ano_inicio, ano_fim, mes)
+                            
+                            cache_count = df_raw.attrs.get('cache_count', 0)
+                            download_count = df_raw.attrs.get('download_count', 0)
+                            
+                            source_msg = "⚡ (carregado do cache local)" if download_count == 0 else "📥 (baixado do FTP do DATASUS)"
+                            success_msg = f"⚡ **Base de dados carregada com sucesso diretamente pelo chat!**\n\n*   **Sistema**: {sistema.upper()}\n*   **UF**: {uf}\n*   **Período**: {ano_inicio} a {ano_fim}\n*   **Registros**: {len(df_raw):,}\n*   **Origem**: {source_msg}\n\nO painel de filtros e os gráficos já foram atualizados com essa nova base de dados!"
+                            
+                            status_placeholder.markdown(success_msg)
+                            st.session_state['chat_messages'].append({'role': 'assistant', 'content': success_msg})
+                            st.rerun()
+                        except Exception as dl_err:
+                            err_msg = f"❌ Erro ao baixar dados solicitados pelo chat: {dl_err}"
+                            status_placeholder.markdown(err_msg)
+                            st.session_state['chat_messages'].append({'role': 'assistant', 'content': err_msg})
+                            
+                    elif df_raw is not None:
                         # ---------------- DATA ANALYST MODE (Data is loaded) ----------------
                         status_placeholder.markdown("🤔 *Analisando estrutura dos dados e preparando query...*")
                         try:
