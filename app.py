@@ -730,8 +730,6 @@ with tab_chat:
         
         if not gemini_api_key:
             st.info("🔑 Por favor, insira sua **Chave API do Gemini** no campo acima para começar a conversar com os dados.")
-        elif df_raw is None:
-            st.info("💡 Por favor, faça uma busca na barra superior para carregar os dados do DATASUS e poder conversar com o banco de dados!")
         else:
             # Save manually entered key to environment for global use
             os.environ["GEMINI_API_KEY"] = gemini_api_key
@@ -752,8 +750,8 @@ with tab_chat:
                             st.code(msg['code'], language="python")
                             st.code(f"Resultado: {msg['result']}", language="text")
                             
-            # Accept user input
-            if prompt_user := st.chat_input("Pergunte algo sobre os dados (ex: 'Qual a cidade com mais internações?' ou 'Qual a média de idade?')"):
+            # Accept user input (always visible once key is entered)
+            if prompt_user := st.chat_input("Pergunte algo sobre os dados ou tire dúvidas gerais sobre o DATASUS:"):
                 # Display user message
                 with st.chat_message("user"):
                     st.markdown(prompt_user)
@@ -762,15 +760,17 @@ with tab_chat:
                 # Generate response
                 with st.chat_message("assistant"):
                     status_placeholder = st.empty()
-                    status_placeholder.markdown("🤔 *Analisando estrutura dos dados e preparando query...*")
                     
-                    try:
-                        # Prepare data context
-                        cols_info = list(df_filtered.columns)
-                        dtypes_info = {k: str(v) for k, v in df_filtered.dtypes.items()}
-                        sample_info = df_filtered.head(3).to_dict(orient='records')
-                        
-                        system_prompt_code = f"""
+                    if df_raw is not None:
+                        # ---------------- DATA ANALYST MODE (Data is loaded) ----------------
+                        status_placeholder.markdown("🤔 *Analisando estrutura dos dados e preparando query...*")
+                        try:
+                            # Prepare data context
+                            cols_info = list(df_filtered.columns)
+                            dtypes_info = {k: str(v) for k, v in df_filtered.dtypes.items()}
+                            sample_info = df_filtered.head(3).to_dict(orient='records')
+                            
+                            system_prompt_code = f"""
 Você é um assistente especialista em análise de dados do DATASUS.
 Você tem acesso a um DataFrame do Pandas chamado `df` que contém os dados atualmente selecionados pelo usuário.
 O DataFrame possui {len(df_filtered)} linhas e as seguintes colunas:
@@ -786,38 +786,32 @@ REGRAS:
 3. Não use comandos perigosos. Use apenas agregações, contagens, ordenações e filtros do Pandas.
 4. Trate valores nulos ou vazios de forma amigável no código.
 """
-                        
-                        # Generate code with Gemini
-                        res_code = client.models.generate_content(
-                            model="gemini-2.5-flash",
-                            contents=system_prompt_code
-                        )
-                        code_text = res_code.text
-                        
-                        # Extract python code block
-                        code_match = re.search(r'```python\s*(.*?)\s*```', code_text, re.DOTALL)
-                        if code_match:
-                            code_to_run = code_match.group(1)
-                        else:
-                            # Fallback if no block format
-                            code_to_run = code_text.strip()
-                            if code_to_run.startswith("python"):
-                                code_to_run = code_to_run[6:]
-                                
-                        status_placeholder.markdown("⚙️ *Executando query nos dados locais...*")
-                        
-                        # Execute code in local namespace
-                        local_vars = {'df': df_filtered, 'pd': pd}
-                        try:
-                            exec(code_to_run, {}, local_vars)
-                            res_exec = local_vars.get('resposta', 'O código foi executado com sucesso, mas a variável "resposta" não foi definida.')
-                        except Exception as exec_err:
-                            res_exec = f"Erro ao executar o código gerado: {exec_err}"
+                            res_code = client.models.generate_content(
+                                model="gemini-2.5-flash",
+                                contents=system_prompt_code
+                            )
+                            code_text = res_code.text
                             
-                        status_placeholder.markdown("✍️ *Interpretando resultados e formulando resposta...*")
-                        
-                        # Final response prompt
-                        final_prompt = f"""
+                            # Extract python code block
+                            code_match = re.search(r'```python\s*(.*?)\s*```', code_text, re.DOTALL)
+                            if code_match:
+                                code_to_run = code_match.group(1)
+                            else:
+                                code_to_run = code_text.strip()
+                                if code_to_run.startswith("python"):
+                                    code_to_run = code_to_run[6:]
+                                    
+                            status_placeholder.markdown("⚙️ *Executando query nos dados locais...*")
+                            local_vars = {'df': df_filtered, 'pd': pd}
+                            try:
+                                exec(code_to_run, {}, local_vars)
+                                res_exec = local_vars.get('resposta', 'O código foi executado com sucesso, mas a variável "resposta" não foi definida.')
+                            except Exception as exec_err:
+                                res_exec = f"Erro ao executar o código gerado: {exec_err}"
+                                
+                            status_placeholder.markdown("✍️ *Interpretando resultados e formulando resposta...*")
+                            
+                            final_prompt = f"""
 O usuário perguntou sobre a base do DATASUS: '{prompt_user}'
 Para responder, nós rodamos o seguinte código Pandas no DataFrame `df`:
 ```python
@@ -828,34 +822,51 @@ O resultado obtido foi:
 
 Com base nisso, formule a resposta final para o usuário de forma amigável, clara e concisa em português do Brasil.
 Escreva a resposta em formato Markdown. Se houver tabelas ou listas, formate-as de forma bonita.
-Se o código falhou ou gerou erro, explique isso ao usuário de forma amigável e sugira outra forma de perguntar.
 """
-                        
-                        res_final = client.models.generate_content(
-                            model="gemini-2.5-flash",
-                            contents=final_prompt
-                        )
-                        final_text = res_final.text
-                        
-                        # Display response
-                        status_placeholder.markdown(final_text)
-                        
-                        with st.expander("🛠️ Código Executado"):
-                            st.code(code_to_run, language="python")
-                            st.code(f"Resultado bruto: {res_exec}", language="text")
+                            res_final = client.models.generate_content(
+                                model="gemini-2.5-flash",
+                                contents=final_prompt
+                            )
+                            final_text = res_final.text
                             
-                        # Save message
-                        st.session_state['chat_messages'].append({
-                            'role': 'assistant',
-                            'content': final_text,
-                            'code': code_to_run,
-                            'result': str(res_exec)
-                        })
-                        
-                    except Exception as api_err:
-                        err_msg = f"❌ Ocorreu um erro ao conectar com o Gemini: {api_err}"
-                        status_placeholder.markdown(err_msg)
-                        st.session_state['chat_messages'].append({'role': 'assistant', 'content': err_msg})
+                            status_placeholder.markdown(final_text)
+                            
+                            with st.expander("🛠️ Código Executado"):
+                                st.code(code_to_run, language="python")
+                                st.code(f"Resultado bruto: {res_exec}", language="text")
+                                
+                            st.session_state['chat_messages'].append({
+                                'role': 'assistant',
+                                'content': final_text,
+                                'code': code_to_run,
+                                'result': str(res_exec)
+                            })
+                        except Exception as err:
+                            err_msg = f"❌ Ocorreu um erro: {err}"
+                            status_placeholder.markdown(err_msg)
+                            st.session_state['chat_messages'].append({'role': 'assistant', 'content': err_msg})
+                    else:
+                        # ---------------- GENERAL ASSISTANT MODE (No data loaded) ----------------
+                        status_placeholder.markdown("🤔 *Consultando Gemini...*")
+                        try:
+                            system_prompt_general = f"""
+Você é um assistente científico do DATASUS.
+Atualmente, nenhuma base de dados do DATASUS foi carregada na memória pelo usuário.
+Responda à pergunta do usuário: '{prompt_user}'.
+Se ele fizer perguntas que dependam de análise de dados específicos (como contagem de casos, médias, gráficos das bases), explique amigavelmente que ele precisa primeiro fazer uma busca na barra superior ou lateral do site para baixar os dados na memória.
+Se for uma dúvida geral teórica sobre saúde, sobre a CID-10, ou sobre o funcionamento do DATASUS (SIM, SIH, SINASC, etc.), responda de forma prestativa, clara e objetiva em português do Brasil usando Markdown.
+"""
+                            res_general = client.models.generate_content(
+                                model="gemini-2.5-flash",
+                                contents=system_prompt_general
+                            )
+                            final_text = res_general.text
+                            status_placeholder.markdown(final_text)
+                            st.session_state['chat_messages'].append({'role': 'assistant', 'content': final_text})
+                        except Exception as api_err:
+                            err_msg = f"❌ Ocorreu um erro ao conectar com o Gemini: {api_err}"
+                            status_placeholder.markdown(err_msg)
+                            st.session_state['chat_messages'].append({'role': 'assistant', 'content': err_msg})
 
 with tab_exportar:
     if df_raw is not None:
