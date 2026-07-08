@@ -243,31 +243,52 @@ def baixar_periodo_datasus(sistema, sigla_arquivo, uf, ano_inicio, ano_fim, mes=
             'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
         ]
         
+    # Determine months to download
+    if sistema.lower() in ['sim', 'sinasc']:
+        # SIM and SINASC are yearly
+        meses_para_baixar = [None]
+    else:
+        # SIH, SIA, CNES are monthly
+        if mes is not None:
+            meses_para_baixar = [mes]
+        else:
+            meses_para_baixar = list(range(1, 13))
+            
     cache_count = 0
     download_count = 0
     
     for ano in anos_range:
         for estado in ufs_para_baixar:
-            try:
-                if len(ufs_para_baixar) > 1:
-                    print(f"\n--- Processando Estado: {estado} | Ano: {ano} ---")
-                else:
-                    print(f"\n--- Processando Ano: {ano} ---")
-                df_ano = baixar_arquivo_datasus(sistema, sigla_arquivo, estado, ano, mes)
-                if df_ano is not None and not df_ano.empty:
-                    # Track cache vs download
-                    if df_ano.attrs.get('from_cache', False):
-                        cache_count += 1
+            for m in meses_para_baixar:
+                try:
+                    if len(ufs_para_baixar) > 1:
+                        lbl_est = f"Estado: {estado} | "
                     else:
-                        download_count += 1
-                    # Add a year column to identify the record year
-                    df_ano['ANO_DATA'] = ano
-                    # Add a state column
-                    df_ano['UF'] = estado
-                    dfs.append(df_ano)
-            except Exception as e:
-                print(f"[Aviso] Erro ao baixar dados de {estado} no ano {ano}: {e}. Pulando...")
-            
+                        lbl_est = ""
+                    if len(meses_para_baixar) > 1:
+                        lbl_mes = f"Mês: {m:02d} | "
+                    else:
+                        lbl_mes = ""
+                    print(f"\n--- Processando {lbl_est}{lbl_mes}Ano: {ano} ---")
+                    
+                    df_mes = baixar_arquivo_datasus(sistema, sigla_arquivo, estado, ano, m)
+                    if df_mes is not None and not df_mes.empty:
+                        # Track cache vs download
+                        if df_mes.attrs.get('from_cache', False):
+                            cache_count += 1
+                        else:
+                            download_count += 1
+                        # Add a year column to identify the record year
+                        df_mes['ANO_DATA'] = ano
+                        # Add a state column
+                        df_mes['UF'] = estado
+                        if m is not None:
+                            df_mes['MES_DATA'] = m
+                        dfs.append(df_mes)
+                except Exception as e:
+                    lbl_info = f"{estado} no ano {ano}" + (f" mês {m}" if m else "")
+                    print(f"[Aviso] Erro ao baixar dados de {lbl_info}: {e}. Pulando...")
+                    
     if not dfs:
         raise RuntimeError(f"Nenhum dado pôde ser baixado para o período {ano_inicio} a {ano_fim} na localidade {uf}.")
         

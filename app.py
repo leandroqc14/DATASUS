@@ -186,7 +186,7 @@ if metodo_busca == "🎛️ Filtros Manuais (Formulário)":
     # Months are only required for monthly databases (SIH, SIA, CNES)
     if sistema_selecionado in ['sih', 'sia', 'cnes']:
         meses_opcoes = {
-            "Sem filtro (Janeiro como padrão)": None,
+            "Todos os meses (Ano Completo)": None,
             "Janeiro (01)": 1, "Fevereiro (02)": 2, "Março (03)": 3,
             "Abril (04)": 4, "Maio (05)": 5, "Junho (06)": 6,
             "Julho (07)": 7, "Agosto (08)": 8, "Setembro (09)": 9,
