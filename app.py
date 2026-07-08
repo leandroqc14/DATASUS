@@ -436,23 +436,27 @@ if df_raw is not None:
         </div>
         """, unsafe_allow_html=True)
         
-    # Tabs for navigation (Preview, Visualization, Cross-tabulation, CID-10 Dictionary, Gemini Chat, Export)
-    tab_dados, tab_graficos, tab_cruzamento, tab_cid10, tab_chat, tab_exportar = st.tabs([
-        "📊 Tabela de Dados", 
-        "📈 Análises Gráficas", 
-        "🔗 Cruzamento de Variáveis (Tabela Cruzada)",
-        "📖 Dicionário CID-10",
-        "💬 Chat IA (Gemini)",
-        "💾 Exportar Base"
-    ])
-    
-    with tab_dados:
+# Tabs for navigation (Preview, Visualization, Cross-tabulation, CID-10 Dictionary, Gemini Chat, Export)
+tab_dados, tab_graficos, tab_cruzamento, tab_cid10, tab_chat, tab_exportar = st.tabs([
+    "📊 Tabela de Dados", 
+    "📈 Análises Gráficas", 
+    "🔗 Cruzamento de Variáveis (Tabela Cruzada)",
+    "📖 Dicionário CID-10",
+    "💬 Chat IA (Gemini)",
+    "💾 Exportar Base"
+])
+
+with tab_dados:
+    if df_raw is not None:
         st.markdown("#### 🔍 Visualização dos Dados Filtrados")
         st.write("Ordene, pesquise ou inspecione a tabela de dados tratada com nomes legíveis abaixo:")
         st.dataframe(df_filtered.head(200), use_container_width=True)
         st.caption("Exibindo as primeiras 200 linhas da tabela filtrada para desempenho rápido no navegador.")
+    else:
+        st.info("💡 Por favor, faça uma busca acima para carregar os dados do DATASUS e visualizar a tabela de dados!")
         
-    with tab_graficos:
+with tab_graficos:
+    if df_raw is not None:
         st.markdown("#### 📊 Análises Gráficas Científicas")
         
         # 1. Custom graphs based on the loaded system
@@ -589,8 +593,11 @@ if df_raw is not None:
                     st.warning("Sem dados numéricos de idade válidos para faixas etárias.")
             else:
                 st.info("ℹ️ Sem dados de idade para plotagem por faixas etárias.")
+    else:
+        st.info("💡 Por favor, faça uma busca acima para carregar os dados do DATASUS e visualizar as análises gráficas!")
 
-    with tab_cruzamento:
+with tab_cruzamento:
+    if df_raw is not None:
         st.markdown("#### 🔗 Cruzamento de Variáveis Demográficas e Clínicas")
         st.write("Selecione duas variáveis para cruzar os dados. O sistema irá gerar tabelas de contingência absolutas e percentuais, além de gráficos empilhados.")
         
@@ -640,8 +647,11 @@ if df_raw is not None:
                 st.pyplot(fig)
             else:
                 st.warning("⚠️ **Sem dados suficientes para gerar o gráfico cruzado.** Verifique se os filtros aplicados não esvaziaram a base de dados.")
+    else:
+        st.info("💡 Por favor, faça uma busca acima para carregar os dados do DATASUS e realizar cruzamento de variáveis!")
 
-    with tab_cid10:
+with tab_cid10:
+    if True:
         st.markdown("#### 📖 Navegador e Dicionário de CIDs (CID-10)")
         st.write("Consulte os códigos e descrições oficiais da Classificação Internacional de Doenças (CID-10) em português.")
         
@@ -705,7 +715,8 @@ if df_raw is not None:
         else:
             st.warning("⚠️ Não foi possível carregar a base de dados da CID-10.")
 
-    with tab_chat:
+with tab_chat:
+    if True:
         st.markdown("#### 💬 Chat Inteligente IA (Gemini)")
         st.write("Faça perguntas sobre os dados carregados em linguagem natural. A IA escreverá o código de consulta apropriado e trará as respostas estruturadas.")
         
@@ -719,6 +730,8 @@ if df_raw is not None:
         
         if not gemini_api_key:
             st.info("🔑 Por favor, insira sua **Chave API do Gemini** no campo acima para começar a conversar com os dados.")
+        elif df_raw is None:
+            st.info("💡 Por favor, faça uma busca na barra superior para carregar os dados do DATASUS e poder conversar com o banco de dados!")
         else:
             # Save manually entered key to environment for global use
             os.environ["GEMINI_API_KEY"] = gemini_api_key
@@ -844,7 +857,8 @@ Se o código falhou ou gerou erro, explique isso ao usuário de forma amigável 
                         status_placeholder.markdown(err_msg)
                         st.session_state['chat_messages'].append({'role': 'assistant', 'content': err_msg})
 
-    with tab_exportar:
+with tab_exportar:
+    if df_raw is not None:
         st.markdown("#### 💾 Exportar e Salvar Base Tratada")
         st.write("Faça o download do arquivo CSV completo. Os dados já contêm todas as decodificações de texto e os filtros selecionados acima.")
         
@@ -863,6 +877,8 @@ Se o código falhou ou gerou erro, explique isso ao usuário de forma amigável 
             use_container_width=True
         )
         st.success(f"Arquivo de exportação gerado: `{nome_arquivo_export}`")
+    else:
+        st.info("💡 Por favor, faça uma busca acima para carregar os dados do DATASUS e exportar a base tratada!")
 
 # Footer
 st.markdown("""
