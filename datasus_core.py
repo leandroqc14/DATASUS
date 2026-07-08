@@ -142,6 +142,8 @@ def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
         print(f"[Cache] Carregando do cache: {nome_parquet}")
         df = pd.read_parquet(caminho_parquet)
         df.attrs['from_cache'] = True
+        if mes:
+            df['MES_DATA'] = mes
         return df
     
     # FTP directories mapping
@@ -214,6 +216,8 @@ def baixar_arquivo_datasus(sistema, sigla_arquivo, uf, ano, mes=None):
         # Save to parquet cache
         df.to_parquet(caminho_parquet, index=False)
         df.attrs['from_cache'] = False
+        if mes:
+            df['MES_DATA'] = mes
         print(f"[Sucesso] Processo concluido! Salvo no cache: {nome_parquet} ({len(df):,} linhas)")
         
         # Cleanup temp files
